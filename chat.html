@@ -1,0 +1,2928 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#FFFFFF">
+    <title>Ping - צ'אט</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%23FFC400%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-linecap%3D%22round%22%20stroke-width%3D%224.5%22%3E%3Cpath%20d%3D%22M33.5%2022.5A11%2011%200%201%200%2033.5%2041.5%22%2F%3E%3Cpath%20d%3D%22M39.5%2022.4A15%2015%200%200%201%2039.5%2041.6%22%2F%3E%3Cpath%20d%3D%22M38%2014.7A20%2020%200%201%200%2038%2049.3%22%2F%3E%3Cpath%20d%3D%22M45.7%2014.3A25%2025%200%200%201%2045.7%2049.7%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%2232%22%20r%3D%225%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Ping shared UI helpers -->
+    <script>
+    /* ==========================================================================
+       Ping – shared UI helpers (classic script, load right after Tailwind CDN)
+       ========================================================================== */
+
+    // Tailwind theme shared by all pages
+    window.tailwind = window.tailwind || {};
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    brand: {
+                        50: '#FFFBEA', 100: '#FFF6D1', 200: '#FFEBA3', 300: '#FFDD66',
+                        400: '#FFCF26', 500: '#FFC400', 600: '#E5A800', 700: '#B38200',
+                        800: '#6B4E00', 900: '#4D3800'
+                    },
+                    ink: { DEFAULT: '#1C1917', 2: '#57534E', muted: '#8A847A' },
+                    line: '#E9E4D8',
+                    canvas: '#F7F5F0'
+                },
+                fontFamily: { sans: ['Heebo', 'Assistant', 'system-ui', 'sans-serif'] }
+            }
+        }
+    };
+
+
+    /* ---------- Splash screen: 2s animation on the first page of each app session ---------- */
+    (function () {
+        // After entry animations have played once, stop them from replaying on re-renders
+        function settle(delay) {
+            const go = () => setTimeout(() => document.body && document.body.classList.add('anim-settled'), delay);
+            if (document.body) go(); else document.addEventListener('DOMContentLoaded', go);
+        }
+        let show = false;
+        try { show = !sessionStorage.getItem('ping:splash'); } catch (e) { show = false; }
+        if (!show || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { settle(1500); return; }
+        settle(1650 + 1500);
+        try { sessionStorage.setItem('ping:splash', '1'); } catch (e) {}
+        document.documentElement.classList.add('ping-splashing');
+        const started = Date.now();
+
+        function mount() {
+            const el = document.createElement('div');
+            el.className = 'splash';
+            el.setAttribute('aria-hidden', 'true');
+            el.innerHTML = `
+                <div class="splash__stage">
+                    <span class="splash__ring"></span><span class="splash__ring"></span><span class="splash__ring"></span>
+                    <svg class="splash__logo" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-linecap="round">
+                        <circle cx="28" cy="32" r="5" fill="#fff" stroke="none"/>
+                        <path d="M33.5 22.5A11 11 0 1 0 33.5 41.5" stroke-width="4.5"/>
+                        <path d="M39.5 22.4A15 15 0 0 1 39.5 41.6" stroke-width="4.5"/>
+                        <path d="M38 14.7A20 20 0 1 0 38 49.3" stroke-width="4.5"/>
+                        <path d="M45.7 14.3A25 25 0 0 1 45.7 49.7" stroke-width="4.5"/>
+                    </svg>
+                </div>
+                <div class="splash__word" dir="ltr"><span>P</span><span>i</span><span>n</span><span>g</span></div>
+                <div class="splash__tag">גלו מה קורה מסביבכם</div>`;
+            document.body.appendChild(el);
+            setTimeout(() => {
+                document.documentElement.classList.remove('ping-splashing');
+                el.classList.add('is-leaving');
+                setTimeout(() => el.remove(), 400);
+            }, Math.max(0, 1650 - (Date.now() - started)));
+        }
+        if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
+    })();
+
+    /* ---------- Smooth page transitions for the bottom nav ---------- */
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a.nav-item');
+        if (!a || a.getAttribute('aria-current') === 'page' || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        document.body.classList.add('page-leave');
+        setTimeout(() => { window.location.href = a.href; }, 140);
+    });
+    window.addEventListener('pageshow', () => document.body && document.body.classList.remove('page-leave'));
+
+    (function () {
+        const S = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+
+        const ICONS = {
+            map: S('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/>'),
+            chat: S('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z"/>'),
+            shop: S('<path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/>'),
+            user: S('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+            settings: S('<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
+            check: S('<path d="m5 12 5 5L20 7"/>', 'stroke-width="3"'),
+            x: S('<path d="M18 6 6 18M6 6l12 12"/>'),
+            alert: S('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'),
+            info: S('<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>'),
+            coin: S('<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.4-.9-1.3-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.2 0-2.1-.6-2.5-1.5M12 6.5V8M12 16v1.5"/>'),
+            gift: S('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>'),
+            image: S('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>'),
+            send: S('<path d="M4 12 20 4l-4 16-4-7-8-1Z"/><path d="m12 13 8-9"/>'),
+            plus: S('<path d="M12 5v14M5 12h14"/>'),
+            userPlus: S('<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/>'),
+            users: S('<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>'),
+            locate: S('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/>'),
+            pin: S('<path d="M12 21s-7-6.1-7-11.5A7 7 0 0 1 19 9.5C19 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>'),
+            pinOff: S('<path d="M8.4 4.1A7 7 0 0 1 19 9.5c0 1.8-.8 3.7-1.9 5.4M14.8 18.1C13.3 19.8 12 21 12 21s-7-6.1-7-11.5c0-.9.2-1.8.5-2.6M3 3l18 18"/>'),
+            camera: S('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/>'),
+            logout: S('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>'),
+            edit: S('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/>'),
+            shield: S('<path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/>'),
+            chevron: S('<path d="m9 6 6 6-6 6"/>'),
+            play: S('<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5 3.5-5 3.5v-7Z" fill="currentColor"/>'),
+            share: S('<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>'),
+            sparkles: S('<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4L12 3Z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>'),
+            palette: S('<path d="M12 3a9 9 0 1 0 0 18c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2A4.7 4.7 0 0 0 21 10.5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10" cy="7" r="1" fill="currentColor"/><circle cx="15" cy="7" r="1" fill="currentColor"/>'),
+            frame: S('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>'),
+            lock: S('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+            arrowRight: S('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+            mail: S('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
+            at: S('<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>'),
+            globe: S('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
+            heart: S('<path d="M12 20s-7.5-4.6-9.3-9.2C1.5 7.5 3.7 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4c3.5 0 5.7 3.5 4.5 6.8C19.5 15.4 12 20 12 20Z"/>'),
+            heartFill: S('<path d="M12 20s-7.5-4.6-9.3-9.2C1.5 7.5 3.7 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4c3.5 0 5.7 3.5 4.5 6.8C19.5 15.4 12 20 12 20Z" fill="currentColor"/>'),
+            flame: S('<path d="M12 22c4 0 7-2.7 7-6.6 0-3.1-1.8-5.4-3.4-7.2-.4 1.6-1.3 2.7-2.4 3.2.3-3.3-1.2-6.6-4.2-9.4.2 3.4-1.6 5.6-3.3 7.6C4.5 11.1 5 12.6 5 15.4 5 19.3 8 22 12 22Z"/>'),
+            grid: S('<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>'),
+            imagePlus: S('<path d="M21 12v6a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h6"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4-4L6 21M18 3v6M15 6h6"/>'),
+            trash: S('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+            restore: S('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>')
+        };
+
+        const LOGO = `<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-linecap="round" aria-hidden="true">
+            <circle cx="28" cy="32" r="5" fill="#fff" stroke="none"/>
+            <path d="M33.5 22.5A11 11 0 1 0 33.5 41.5" stroke-width="4.5"/>
+            <path d="M39.5 22.4A15 15 0 0 1 39.5 41.6" stroke-width="4.5"/>
+            <path d="M38 14.7A20 20 0 1 0 38 49.3" stroke-width="4.5"/>
+            <path d="M45.7 14.3A25 25 0 0 1 45.7 49.7" stroke-width="4.5"/>
+        </svg>`;
+
+        const NAV = [
+            { id: 'home', href: 'index.html', label: 'מפה', icon: 'map' },
+            { id: 'feed', href: 'feed.html', label: 'פוסטים', icon: 'grid' },
+            { id: 'chat', href: 'chat.html', label: "צ'אט", icon: 'chat' },
+            { id: 'shop', href: 'shop.html', label: 'חנות', icon: 'shop' },
+            { id: 'profile', href: 'profile.html', label: 'פרופיל', icon: 'user' }
+        ];
+
+        const icon = (name) => ICONS[name] || '';
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        // Only allow http(s) URLs and inline base64 images into src attributes
+        function safeUrl(url) {
+            const u = String(url || '');
+            if (/^https?:\/\//i.test(u)) return escapeHtml(u);
+            if (/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(u)) return u;
+            return '';
+        }
+
+        function initialOf(name) {
+            const s = String(name || '').trim();
+            return s ? s.charAt(0).toUpperCase() : '?';
+        }
+
+        function avatarHTML({ photoURL, name, size = 'md', frame = '', extraClass = '' } = {}) {
+            const src = safeUrl(photoURL);
+            const frameCls = /^frame[_-][a-z]+$/.test(frame || '') ? frame : '';
+            const inner = src
+                ? `<img src="${src}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+                : escapeHtml(initialOf(name));
+            return `<span class="avatar avatar--${size} ${frameCls} ${extraClass}">${inner}</span>`;
+        }
+
+        function gradClass(grad) {
+            return /^grad[_-][a-z]+$/.test(grad || '') ? grad : '';
+        }
+
+        function formatNumber(n) {
+            return Number(n || 0).toLocaleString('he-IL');
+        }
+
+        /* ---------- Toasts ---------- */
+        let toastRegion;
+        function toast(message, { type = 'info', duration = 3200, action } = {}) {
+            if (!toastRegion) {
+                toastRegion = document.createElement('div');
+                toastRegion.className = 'toast-region';
+                toastRegion.setAttribute('role', 'status');
+                toastRegion.setAttribute('aria-live', 'polite');
+                document.body.appendChild(toastRegion);
+            }
+            const iconName = { success: 'check', error: 'alert', points: 'coin', info: 'info' }[type] || 'info';
+            const el = document.createElement('div');
+            el.className = `toast toast--${type}`;
+            el.innerHTML = `<span class="toast__icon">${icon(iconName)}</span><span>${escapeHtml(message)}</span>`;
+            if (action) {
+                const a = document.createElement(action.href ? 'a' : 'button');
+                a.className = 'toast__action';
+                a.textContent = action.label;
+                if (action.href) a.href = action.href;
+                if (action.onClick) a.addEventListener('click', () => { action.onClick(); dismiss(); });
+                el.appendChild(a);
+            }
+            toastRegion.appendChild(el);
+            while (toastRegion.children.length > 3) toastRegion.firstChild.remove();
+
+            let timer = setTimeout(dismiss, duration);
+            el.addEventListener('mouseenter', () => clearTimeout(timer));
+            el.addEventListener('mouseleave', () => { timer = setTimeout(dismiss, 1500); });
+            function dismiss() {
+                el.classList.add('is-leaving');
+                setTimeout(() => el.remove(), 200);
+            }
+            return dismiss;
+        }
+
+        /* ---------- Modals ---------- */
+        const openStack = [];
+        let lastFocus = null;
+
+        function openModal(id) {
+            const m = typeof id === 'string' ? document.getElementById(id) : id;
+            if (!m || m.classList.contains('is-open')) return;
+            lastFocus = document.activeElement;
+            m.classList.add('is-open');
+            m.setAttribute('aria-hidden', 'false');
+            openStack.push(m);
+            const focusTarget = m.querySelector('[autofocus], input:not([type=hidden]), button.btn-primary, button');
+            if (focusTarget) setTimeout(() => focusTarget.focus({ preventScroll: true }), 60);
+        }
+
+        function closeModal(id) {
+            const m = id
+                ? (typeof id === 'string' ? document.getElementById(id) : id)
+                : openStack[openStack.length - 1];
+            if (!m || !m.classList.contains('is-open')) return;
+            m.classList.remove('is-open');
+            m.setAttribute('aria-hidden', 'true');
+            const i = openStack.indexOf(m);
+            if (i >= 0) openStack.splice(i, 1);
+            m.dispatchEvent(new CustomEvent('modal:close'));
+            if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || !openStack.length) return;
+            const top = openStack[openStack.length - 1];
+            if (top.dataset.static === undefined) closeModal(top);
+        });
+
+        document.addEventListener('click', (e) => {
+            const closer = e.target.closest('[data-close-modal]');
+            if (closer) { closeModal(closer.closest('.modal')); return; }
+            if (e.target.classList && e.target.classList.contains('modal') && e.target.dataset.static === undefined) {
+                closeModal(e.target);
+            }
+        });
+
+        /* ---------- Confirm dialog ---------- */
+        function confirmDialog({ title, message, confirmText = 'אישור', cancelText = 'ביטול', tone = 'primary', iconName } = {}) {
+            return new Promise((resolve) => {
+                const m = document.createElement('div');
+                m.className = 'modal';
+                m.setAttribute('role', 'dialog');
+                m.setAttribute('aria-modal', 'true');
+                const hero = iconName
+                    ? `<div class="modal__hero ${tone === 'danger' ? 'modal__hero--danger' : ''}">${icon(iconName)}</div>`
+                    : '';
+                m.innerHTML = `
+                    <div class="modal__panel text-center">
+                        <div class="modal__grabber"></div>
+                        ${hero}
+                        <h3 class="modal__title">${escapeHtml(title)}</h3>
+                        ${message ? `<p class="modal__text mt-2">${escapeHtml(message)}</p>` : ''}
+                        <div class="modal__actions">
+                            <button type="button" class="btn btn-soft" data-act="cancel">${escapeHtml(cancelText)}</button>
+                            <button type="button" class="btn ${tone === 'danger' ? 'btn-danger' : 'btn-primary'}" data-act="ok">${escapeHtml(confirmText)}</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(m);
+                let result = false;
+                m.querySelector('[data-act="ok"]').addEventListener('click', () => { result = true; closeModal(m); });
+                m.querySelector('[data-act="cancel"]').addEventListener('click', () => closeModal(m));
+                m.addEventListener('modal:close', () => { resolve(result); setTimeout(() => m.remove(), 50); });
+                openModal(m);
+                setTimeout(() => m.querySelector('[data-act="ok"]').focus(), 60);
+            });
+        }
+
+        /* ---------- Button loading ---------- */
+        function setLoading(btn, loading) {
+            if (!btn) return;
+            btn.classList.toggle('is-loading', !!loading);
+            btn.disabled = !!loading;
+            btn.setAttribute('aria-busy', loading ? 'true' : 'false');
+        }
+
+        /* ---------- Points chip ---------- */
+        function setPoints(value) {
+            document.querySelectorAll('[data-points]').forEach((el) => {
+                const prev = el.dataset.value;
+                const next = String(value ?? 0);
+                el.textContent = formatNumber(value);
+                if (prev !== undefined && prev !== next) {
+                    const chip = el.closest('.points-chip');
+                    if (chip) { chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump'); }
+                }
+                el.dataset.value = next;
+            });
+        }
+
+        /* ---------- Auto-render nav + logos ---------- */
+        function renderNav(nav) {
+            const active = nav.dataset.pingNav;
+            nav.classList.add('bottom-nav');
+            nav.setAttribute('aria-label', 'ניווט ראשי');
+            nav.innerHTML = NAV.map((t) => `
+                <a href="${t.href}" class="nav-item" data-nav-id="${t.id}" ${t.id === active ? 'aria-current="page"' : ''}>
+                    <span class="nav-item__icon">${icon(t.icon)}</span>
+                    <span>${t.label}</span>
+                </a>`).join('');
+        }
+
+        function setNavBadge(id, count) {
+            const item = document.querySelector(`.nav-item[data-nav-id="${id}"]`);
+            if (!item) return;
+            let b = item.querySelector('.nav-item__badge');
+            if (!count) { if (b) b.remove(); return; }
+            if (!b) { b = document.createElement('span'); b.className = 'nav-item__badge'; item.appendChild(b); }
+            b.textContent = count > 9 ? '9+' : count;
+        }
+
+        function hydrate(root = document) {
+            root.querySelectorAll('[data-ping-nav]').forEach(renderNav);
+            root.querySelectorAll('[data-ping-logo]').forEach((el) => {
+                el.classList.add('ping-logo');
+                el.innerHTML = LOGO;
+            });
+            root.querySelectorAll('[data-icon]').forEach((el) => {
+                if (!el.dataset.iconDone) { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)); el.dataset.iconDone = '1'; }
+            });
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => hydrate());
+        else hydrate();
+
+        // Cosmetic items catalog (shared by shop & profile)
+        const CATALOG = {
+            frames: [
+                { id: 'frame_gold', name: 'זהב יוקרתי', desc: 'הילה מוזהבת ומבריקה', price: 250 },
+                { id: 'frame_neon', name: 'ניאון כחול', desc: 'זוהר חשמלי ועתידני', price: 250 },
+                { id: 'frame_fire', name: 'אש לוהטת', desc: 'זוהר אדום שבולט במפה', price: 250 },
+                { id: 'frame_purple', name: 'קוסמי סגול', desc: 'הילה סגולה מסתורית', price: 250 }
+            ],
+            gradients: [
+                { id: 'grad_sunset', name: 'שקיעה', desc: 'כתום אל ורוד', price: 250 },
+                { id: 'grad_ocean', name: 'אוקיינוס', desc: 'תכלת אל כחול עמוק', price: 250 },
+                { id: 'grad_neon', name: 'ניאון', desc: 'ירוק אל צהוב', price: 250 },
+                { id: 'grad_cosmic', name: 'קוסמי', desc: 'סגול אל ורוד', price: 250 }
+            ]
+        };
+
+        /* ---------- Image upload ----------
+           Images are resized/compressed in the browser first. If a Cloudinary
+           *unsigned* upload preset named CLOUDINARY.preset exists, the image is
+           hosted there; otherwise it falls back to a compact inline data URL that
+           is saved directly in Firestore, so uploads always work. */
+        const CLOUDINARY = { cloud: 'lf1jkqoz', preset: 'ping_unsigned' };
+        const UPLOAD_PROFILES = {
+            avatar: { max: 512, fallbackMax: 192, fallbackBytes: 24000 },
+            chat: { max: 1600, fallbackMax: 1080, fallbackBytes: 380000 },
+            post: { max: 1600, fallbackMax: 1080, fallbackBytes: 420000 }
+        };
+        const NO_CLOUD_KEY = 'ping:cloudinary-unavailable';
+
+        async function loadBitmap(file) {
+            if (window.createImageBitmap) {
+                try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { /* fall through */ }
+            }
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+                img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+                img.src = url;
+            });
+        }
+
+        async function compressImage(file, { maxSize = 1600, quality = 0.82, maxBytes = 0 } = {}) {
+            const bmp = await loadBitmap(file);
+            let w = bmp.width, h = bmp.height;
+            let scale = Math.min(1, maxSize / Math.max(w, h));
+            const canvas = document.createElement('canvas');
+            const toBlob = (q) => new Promise((r) => canvas.toBlob(r, 'image/jpeg', q));
+            let q = quality, blob;
+            for (let attempt = 0; attempt < 8; attempt++) {
+                canvas.width = Math.max(1, Math.round(w * scale));
+                canvas.height = Math.max(1, Math.round(h * scale));
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+                blob = await toBlob(q);
+                if (!maxBytes || blob.size <= maxBytes) break;
+                if (q > 0.5) q -= 0.12; else scale *= 0.8;
+            }
+            if (bmp.close) bmp.close();
+            return blob;
+        }
+
+        const blobToDataURL = (blob) => new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsDataURL(blob);
+        });
+
+        async function uploadImage(file, kind = 'post') {
+            if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('not-image');
+            if (file.size > 25 * 1024 * 1024) throw new Error('too-large');
+            const p = UPLOAD_PROFILES[kind] || UPLOAD_PROFILES.post;
+
+            let cloudOff = false;
+            try { cloudOff = sessionStorage.getItem(NO_CLOUD_KEY) === '1'; } catch (e) {}
+
+            if (!cloudOff && CLOUDINARY.preset) {
+                try {
+                    const blob = await compressImage(file, { maxSize: p.max, quality: 0.85 });
+                    const fd = new FormData();
+                    fd.append('file', blob, 'image.jpg');
+                    fd.append('upload_preset', CLOUDINARY.preset);
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY.cloud}/image/upload`, { method: 'POST', body: fd });
+                    const data = await res.json();
+                    if (data.secure_url) return data.secure_url;
+                    console.warn('Cloudinary upload failed, using inline image:', data.error && data.error.message);
+                    if (data.error && /preset/i.test(data.error.message || '')) {
+                        try { sessionStorage.setItem(NO_CLOUD_KEY, '1'); } catch (e) {}
+                    }
+                } catch (e) {
+                    console.warn('Cloudinary unreachable, using inline image:', e);
+                }
+            }
+
+            const small = await compressImage(file, { maxSize: p.fallbackMax, quality: 0.8, maxBytes: p.fallbackBytes });
+            return blobToDataURL(small);
+        }
+
+        function uploadErrorMessage(err) {
+            const m = err && err.message;
+            if (m === 'not-image') return 'אפשר להעלות רק קבצי תמונה';
+            if (m === 'too-large') return 'התמונה גדולה מדי (עד 25MB)';
+            if (m === 'unreadable') return 'לא הצלחנו לקרוא את התמונה. נסו פורמט JPG או PNG';
+            return 'ההעלאה נכשלה, נסו שוב';
+        }
+
+        /* ---------- Chat streaks ----------
+           A day counts when BOTH friends sent at least one message that day.
+           Every 10 days each friend can claim 100 points (claimed by each user
+           for themselves). A broken streak can be restored for 70 points within
+           7 days. */
+        const STREAK = { REWARD_EVERY: 10, REWARD_POINTS: 100, RESTORE_COST: 70, RESTORE_WINDOW_DAYS: 7, MIN_RESTORE: 2 };
+
+        const pad = (n) => String(n).padStart(2, '0');
+        function dayKey(d = new Date()) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+        function addDays(key, n) {
+            const [y, m, d] = key.split('-').map(Number);
+            return dayKey(new Date(y, m - 1, d + n));
+        }
+
+        function normalizeStreak(s) {
+            s = s || {};
+            return {
+                count: s.count || 0,
+                lastDay: s.lastDay || null,
+                lastSent: { ...(s.lastSent || {}) },
+                lost: s.lost || null,
+                milestones: s.milestones || 0,
+                claimed: { ...(s.claimed || {}) }
+            };
+        }
+
+        // Returns the new streak after `me` sends a message today, plus whether a day was completed
+        function streakApplySend(raw, me, other, today = dayKey()) {
+            const s = normalizeStreak(raw);
+            s.lastSent[me] = today;
+            let completed = false;
+            if (s.lastSent[other] === today && s.lastDay !== today) {
+                if (s.lastDay === addDays(today, -1)) {
+                    s.count += 1;
+                } else {
+                    if (s.count >= STREAK.MIN_RESTORE) s.lost = { count: s.count, at: today };
+                    s.count = 1;
+                }
+                s.lastDay = today;
+                if (s.count % STREAK.REWARD_EVERY === 0) s.milestones += 1;
+                completed = true;
+            }
+            return { streak: s, completed };
+        }
+
+        function streakStatus(raw, me, other, today = dayKey()) {
+            const s = normalizeStreak(raw);
+            const yesterday = addDays(today, -1);
+            const windowStart = addDays(today, -STREAK.RESTORE_WINDOW_DAYS);
+            let state = 'none', count = 0, restore = null;
+
+            if (s.count > 0 && s.lastDay === today) { state = 'active'; count = s.count; }
+            else if (s.count > 0 && s.lastDay === yesterday) { state = 'atRisk'; count = s.count; }
+            else if (s.count > 0) {
+                state = 'broken';
+                if (s.count >= STREAK.MIN_RESTORE && s.lastDay >= windowStart) restore = { type: 'resume', count: s.count };
+            }
+            if (!restore && s.lost && s.lost.count >= STREAK.MIN_RESTORE && s.lost.at >= windowStart) {
+                restore = { type: 'merge', count: s.lost.count };
+            }
+
+            const next = (Math.floor(count / STREAK.REWARD_EVERY) + 1) * STREAK.REWARD_EVERY;
+            return {
+                state, count, restore,
+                nextMilestone: next,
+                daysToNext: next - count,
+                progress: (count % STREAK.REWARD_EVERY) / STREAK.REWARD_EVERY,
+                meToday: s.lastSent[me] === today,
+                otherToday: s.lastSent[other] === today,
+                claimable: Math.max(0, s.milestones - (s.claimed[me] || 0))
+            };
+        }
+
+        function streakApplyRestore(raw, today = dayKey()) {
+            const s = normalizeStreak(raw);
+            const st = streakStatus(s, '', '', today);
+            if (!st.restore) return null;
+            if (st.restore.type === 'resume') {
+                s.lastDay = addDays(today, -1); // bridge the gap; chatting today continues it
+            } else {
+                const before = s.count;
+                const lostCount = s.lost.count;
+                s.count = lostCount + before;
+                const E = STREAK.REWARD_EVERY;
+                s.milestones += Math.max(0, Math.floor(s.count / E) - Math.floor(lostCount / E) - Math.floor(before / E));
+            }
+            s.lost = null;
+            return s;
+        }
+
+        function streakClaim(raw, me) {
+            const s = normalizeStreak(raw);
+            const n = Math.max(0, s.milestones - (s.claimed[me] || 0));
+            s.claimed[me] = s.milestones;
+            return { streak: s, rewards: n, points: n * STREAK.REWARD_POINTS };
+        }
+
+        /* ---------- Post likes ----------
+           Likers only touch the post (likedBy / everLiked). The author's own
+           client turns new likes into points (3 each), so no one writes to
+           another user's balance. everLiked never shrinks, so unlike+relike
+           can't be farmed. */
+        const LIKE_POINTS = 3;
+        const likeClaiming = new Set();
+        async function claimLikeRewards(db, fs, posts, uid) {
+            const pending = posts.filter(p => p.uid === uid && !likeClaiming.has(p.id) &&
+                (p.everLiked || []).length > (p.rewardedLikes || 0));
+            let likes = 0;
+            for (const p of pending) {
+                likeClaiming.add(p.id);
+                try {
+                    likes += await fs.runTransaction(db, async (tx) => {
+                        const ref = fs.doc(db, 'posts', p.id);
+                        const snap = await tx.get(ref);
+                        if (!snap.exists() || snap.data().uid !== uid) return 0;
+                        const d = snap.data();
+                        const total = (d.everLiked || []).length;
+                        const n = total - (d.rewardedLikes || 0);
+                        if (n <= 0) return 0;
+                        tx.update(ref, { rewardedLikes: total });
+                        tx.update(fs.doc(db, 'users', uid), { points: fs.increment(n * LIKE_POINTS) });
+                        return n;
+                    });
+                } catch (e) {
+                    console.warn('Like reward claim failed:', e);
+                } finally {
+                    likeClaiming.delete(p.id);
+                }
+            }
+            if (likes) {
+                toast(`❤️ ${likes === 1 ? 'לייק חדש' : `${likes} לייקים חדשים`} · +${likes * LIKE_POINTS} נקודות`, { type: 'points', duration: 4000 });
+            }
+        }
+
+        /* ---------- Time ---------- */
+        function timeAgo(date) {
+            if (!date) return 'עכשיו';
+            const d = date instanceof Date ? date : new Date(date);
+            const mins = Math.round((Date.now() - d.getTime()) / 60000);
+            if (mins < 1) return 'עכשיו';
+            if (mins < 60) return `לפני ${mins} דק׳`;
+            const hours = Math.round(mins / 60);
+            if (hours < 24) return `לפני ${hours} שע׳`;
+            const days = Math.round(hours / 24);
+            if (days < 7) return days === 1 ? 'אתמול' : `לפני ${days} ימים`;
+            return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+        }
+
+        /* ---------- Guest gating ----------
+           Guests (anonymous sign-in) can browse, chat and like, but posting
+           and friends need a Google account. Linking keeps the same account. */
+        function isGuestUser(user, data) {
+            return !!((user && user.isAnonymous) || (data && data.isGuest));
+        }
+        async function requireGoogle(reason) {
+            const ok = await confirmDialog({
+                title: 'צריך חשבון Google',
+                message: `${reason} הנקודות והפריטים שצברתם כאורחים יישמרו.`,
+                confirmText: 'חיבור עם Google',
+                cancelText: 'לא עכשיו',
+                iconName: 'lock'
+            });
+            if (ok) {
+                const next = (location.pathname.split('/').pop() || 'index.html') + location.search;
+                location.href = 'auth.html?upgrade=1&next=' + encodeURIComponent(next);
+            }
+            return false;
+        }
+
+        /* ---------- Live profiles ----------
+           Friends lists, messages and posts keep a copy of a person's photo/name from when
+           they were saved, so it goes stale. Pages render with live profiles instead:
+           friends (and you) are watched in real time, anyone else is fetched once.
+           Your own friends list is also refreshed so every page shows current info. */
+        const profiles = {};          // uid -> { uid, username, displayName, photoURL, activeFrame, activeGradient }
+        const profileSubs = {};       // uid -> unsubscribe
+        const profileFetching = new Set();
+        const live = { db: null, fs: null, user: null, started: false, friendsKey: '' };
+        let profilesEmitTimer = null;
+        let friendsRefreshTimer = null;
+
+        function emitProfiles() {
+            clearTimeout(profilesEmitTimer);
+            profilesEmitTimer = setTimeout(() => window.dispatchEvent(new CustomEvent('ping:profiles')), 60);
+        }
+
+        function pickProfile(uid, d) {
+            return {
+                uid, username: d.username || '', displayName: d.displayName || d.username || '',
+                photoURL: d.photoURL || '', activeFrame: d.activeFrame || '', activeGradient: d.activeGradient || ''
+            };
+        }
+
+        function setProfile(uid, d) {
+            const next = pickProfile(uid, d);
+            const prev = profiles[uid];
+            profiles[uid] = next;
+            if (!prev || JSON.stringify(prev) !== JSON.stringify(next)) emitProfiles();
+        }
+
+        function watchProfile(uid) {
+            if (profileSubs[uid] || !live.started) return;
+            const { db, fs } = live;
+            profileSubs[uid] = fs.onSnapshot(fs.doc(db, 'users', uid), (snap) => {
+                if (snap.exists()) { setProfile(uid, snap.data()); scheduleFriendsRefresh(); }
+            }, (err) => console.warn('Profile listener:', err));
+        }
+
+        async function fetchProfile(uid) {
+            if (!live.started || profiles[uid] || profileFetching.has(uid)) return;
+            profileFetching.add(uid);
+            try {
+                const snap = await live.fs.getDoc(live.fs.doc(live.db, 'users', uid));
+                if (snap.exists()) setProfile(uid, snap.data());
+            } catch (e) { /* keep the saved copy */ }
+        }
+
+        function startProfiles(db, fs, user) {
+            if (live.started) return;
+            Object.assign(live, { db, fs, user, started: true });
+            profileSubs[user.uid] = fs.onSnapshot(fs.doc(db, 'users', user.uid), (snap) => {
+                if (!snap.exists()) return;
+                const me = snap.data();
+                setProfile(user.uid, me);
+                const friends = me.friends || [];
+                const key = friends.map(f => f.uid).sort().join(',');
+                if (key !== live.friendsKey) {
+                    live.friendsKey = key;
+                    const wanted = new Set(friends.map(f => f.uid));
+                    Object.keys(profileSubs).forEach(uid => {
+                        if (uid !== user.uid && !wanted.has(uid)) { profileSubs[uid](); delete profileSubs[uid]; }
+                    });
+                    friends.forEach(f => watchProfile(f.uid));
+                }
+                scheduleFriendsRefresh(me);
+            }, (err) => console.warn('Own profile listener:', err));
+        }
+
+        // Rewrite my saved friends list when a friend changed their photo / name / username
+        function scheduleFriendsRefresh() {
+            clearTimeout(friendsRefreshTimer);
+            friendsRefreshTimer = setTimeout(refreshFriendsList, 1500);
+        }
+        async function refreshFriendsList() {
+            const { db, fs, user } = live;
+            try {
+                await fs.runTransaction(db, async (tx) => {
+                    const ref = fs.doc(db, 'users', user.uid);
+                    const snap = await tx.get(ref);
+                    if (!snap.exists()) return;
+                    const friends = snap.data().friends || [];
+                    let changed = false;
+                    const next = friends.map(f => {
+                        const p = profiles[f.uid];
+                        if (!p) return f;
+                        if (f.photoURL === p.photoURL && f.displayName === p.displayName && f.username === p.username) return f;
+                        changed = true;
+                        return { ...f, photoURL: p.photoURL, displayName: p.displayName, username: p.username };
+                    });
+                    if (changed) tx.update(ref, { friends: next });
+                });
+            } catch (e) {
+                console.warn('Friends list refresh failed:', e);
+            }
+        }
+
+        // Current look of a user; falls back to the copy saved in a message / post / friends list
+        function liveProfile(uid, fb = {}) {
+            const p = uid ? profiles[uid] : null;
+            if (uid && !p) fetchProfile(uid);
+            return {
+                uid,
+                username: (p && p.username) || fb.username || '',
+                name: (p && p.displayName) || fb.displayName || fb.name || fb.username || '',
+                photoURL: p ? p.photoURL : (fb.photoURL || ''),
+                frame: p ? p.activeFrame : (fb.frame || fb.activeFrame || ''),
+                gradient: p ? p.activeGradient : (fb.gradient || fb.activeGradient || '')
+            };
+        }
+
+        // A person's name, painted in their purchased gradient
+        function nameHTML(p) {
+            return `<span class="${gradClass(p.gradient)}">${escapeHtml(p.name)}</span>`;
+        }
+
+        /* ---------- Friend requests ----------
+           friendRequests/{fromUid}_{toUid}: { fromUid, from*, toUid, to*, status: pending|accepted|declined, linked }
+           - The recipient accepts: adds the sender to THEIR OWN friends and marks the request accepted.
+           - The sender's app then sees "accepted" and adds the recipient to ITS OWN friends (linked: true).
+           Nobody writes to another user's profile document. */
+        const social = { db: null, fs: null, user: null, incoming: [], outgoing: [], started: false };
+        const SEEN_KEY = 'ping:req-seen';
+        const reqId = (from, to) => from + '_' + to;
+        const linking = new Set();
+
+        function emitRequests() {
+            setNavBadge('chat', social.incoming.length);
+            window.dispatchEvent(new CustomEvent('ping:requests', { detail: { incoming: social.incoming, outgoing: social.outgoing } }));
+        }
+
+        function readSeen() { try { return new Set(JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')); } catch (e) { return new Set(); } }
+        function writeSeen(set) { try { sessionStorage.setItem(SEEN_KEY, JSON.stringify([...set])); } catch (e) {} }
+
+        function startSocial(db, fs, user) {
+            if (!user) return;
+            startProfiles(db, fs, user);
+            if (social.started || user.isAnonymous) return;
+            Object.assign(social, { db, fs, user, started: true });
+            const col = fs.collection(db, 'friendRequests');
+            const ms = (r) => (r.createdAt && r.createdAt.toMillis ? r.createdAt.toMillis() : Date.now());
+
+            fs.onSnapshot(fs.query(col, fs.where('toUid', '==', user.uid), fs.where('status', '==', 'pending')), (snap) => {
+                social.incoming = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b) - ms(a));
+                emitRequests();
+                const seen = readSeen();
+                social.incoming.forEach(r => { if (!seen.has(r.id)) { seen.add(r.id); showRequestBanner(r); } });
+                writeSeen(seen);
+            }, (err) => console.warn('Incoming requests listener:', err));
+
+            fs.onSnapshot(fs.query(col, fs.where('fromUid', '==', user.uid)), (snap) => {
+                const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                social.outgoing = all.filter(r => r.status === 'pending').sort((a, b) => ms(b) - ms(a));
+                emitRequests();
+                all.filter(r => r.status === 'accepted' && !r.linked).forEach(linkAccepted);
+            }, (err) => console.warn('Outgoing requests listener:', err));
+        }
+
+        // Sender side: the other person accepted, add them to my friends
+        async function linkAccepted(req) {
+            if (linking.has(req.id)) return;
+            linking.add(req.id);
+            const { db, fs, user } = social;
+            try {
+                const added = await fs.runTransaction(db, async (tx) => {
+                    const uref = fs.doc(db, 'users', user.uid);
+                    const rref = fs.doc(db, 'friendRequests', req.id);
+                    const us = await tx.get(uref);
+                    const rs = await tx.get(rref);
+                    if (!rs.exists() || rs.data().linked) return false;
+                    const r = rs.data();
+                    const friends = (us.data() && us.data().friends) || [];
+                    if (!friends.some(f => f.uid === r.toUid)) {
+                        tx.update(uref, { friends: [...friends, { uid: r.toUid, username: r.toUsername || '', displayName: r.toDisplayName || r.toUsername || '', photoURL: r.toPhotoURL || '' }] });
+                    }
+                    tx.update(rref, { linked: true });
+                    return true;
+                });
+                if (added) {
+                    toast(`${req.toDisplayName || req.toUsername} אישר/ה את בקשת החברות שלך 🎉`, {
+                        type: 'success', duration: 5000,
+                        action: { label: 'שליחת הודעה', href: 'chat.html?with=' + encodeURIComponent(req.toUid) }
+                    });
+                }
+            } catch (e) {
+                console.warn('Linking accepted request failed:', e);
+            } finally {
+                linking.delete(req.id);
+            }
+        }
+
+        // Recipient side
+        async function acceptFriendRequest(req) {
+            const { db, fs, user } = social;
+            const name = req.fromDisplayName || req.fromUsername;
+            try {
+                await fs.runTransaction(db, async (tx) => {
+                    const uref = fs.doc(db, 'users', user.uid);
+                    const rref = fs.doc(db, 'friendRequests', req.id);
+                    const us = await tx.get(uref);
+                    const rs = await tx.get(rref);
+                    if (!rs.exists() || rs.data().status !== 'pending') throw new Error('gone');
+                    const me = us.data();
+                    const friends = me.friends || [];
+                    if (!friends.some(f => f.uid === req.fromUid)) {
+                        tx.update(uref, { friends: [...friends, { uid: req.fromUid, username: req.fromUsername, displayName: name, photoURL: req.fromPhotoURL || '' }] });
+                    }
+                    tx.update(rref, {
+                        status: 'accepted',
+                        toUsername: me.username, toDisplayName: me.displayName || me.username, toPhotoURL: me.photoURL || '',
+                        respondedAt: new Date().toISOString()
+                    });
+                });
+                toast(`${name} נוסף/ה לחברים שלך`, {
+                    type: 'success', duration: 4500,
+                    action: { label: 'שליחת הודעה', href: 'chat.html?with=' + encodeURIComponent(req.fromUid) }
+                });
+                return true;
+            } catch (e) {
+                console.error('Accept request failed:', e);
+                toast(e.message === 'gone' ? 'הבקשה כבר לא בתוקף' : 'האישור נכשל, נסו שוב', { type: 'error' });
+                return false;
+            }
+        }
+
+        async function declineFriendRequest(req) {
+            const { db, fs } = social;
+            try {
+                await fs.updateDoc(fs.doc(db, 'friendRequests', req.id), { status: 'declined', respondedAt: new Date().toISOString() });
+                toast('הבקשה נדחתה', { duration: 2000 });
+                return true;
+            } catch (e) {
+                console.error('Decline request failed:', e);
+                toast('הדחייה נכשלה, נסו שוב', { type: 'error' });
+                return false;
+            }
+        }
+
+        async function cancelFriendRequest(req) {
+            const { db, fs } = social;
+            try {
+                await fs.deleteDoc(fs.doc(db, 'friendRequests', req.id));
+                toast('הבקשה בוטלה', { duration: 2000 });
+            } catch (e) {
+                console.error('Cancel request failed:', e);
+                toast('הביטול נכשל', { type: 'error' });
+            }
+        }
+
+        // Returns 'sent' | 'accepted' (they had already asked you) | throws Error(code)
+        async function sendFriendRequest(me, target) {
+            const { db, fs, user } = social;
+            if (!user) throw new Error('not-ready');
+            const reverse = await fs.getDoc(fs.doc(db, 'friendRequests', reqId(target.uid, user.uid)));
+            if (reverse.exists() && reverse.data().status === 'pending') {
+                const ok = await acceptFriendRequest({ id: reverse.id, ...reverse.data() });
+                if (ok) return 'accepted';
+                throw new Error('failed');
+            }
+            const existing = await fs.getDoc(fs.doc(db, 'friendRequests', reqId(user.uid, target.uid)));
+            if (existing.exists() && existing.data().status === 'pending') throw new Error('already-pending');
+            await fs.setDoc(fs.doc(db, 'friendRequests', reqId(user.uid, target.uid)), {
+                fromUid: user.uid, fromUsername: me.username, fromDisplayName: me.displayName || me.username,
+                fromPhotoURL: me.photoURL || '', fromFrame: me.activeFrame || '',
+                toUid: target.uid, toUsername: target.username, toDisplayName: target.displayName || target.username,
+                toPhotoURL: target.photoURL || '',
+                status: 'pending', linked: false, createdAt: fs.serverTimestamp()
+            });
+            return 'sent';
+        }
+
+        let bannerRegion;
+        function showRequestBanner(req) {
+            if (!bannerRegion) {
+                bannerRegion = document.createElement('div');
+                bannerRegion.className = 'req-banners';
+                bannerRegion.setAttribute('aria-live', 'polite');
+                document.body.appendChild(bannerRegion);
+            }
+            const el = document.createElement('div');
+            el.className = 'req-banner';
+            el.setAttribute('role', 'alertdialog');
+            el.setAttribute('aria-label', 'בקשת חברות');
+            el.innerHTML = `
+                ${avatarHTML({ photoURL: req.fromPhotoURL, name: req.fromDisplayName || req.fromUsername, size: 'md', frame: req.fromFrame })}
+                <div class="req-banner__body">
+                    <div class="req-banner__title">${escapeHtml(req.fromDisplayName || req.fromUsername)}</div>
+                    <div class="req-banner__sub">שלח/ה לך בקשת חברות · <span dir="ltr">@${escapeHtml(req.fromUsername)}</span></div>
+                </div>
+                <button type="button" class="req-btn req-btn--no" data-act="no" aria-label="דחייה">${icon('x')}</button>
+                <button type="button" class="req-btn req-btn--yes" data-act="yes" aria-label="אישור">${icon('check')}</button>`;
+            bannerRegion.appendChild(el);
+            if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate([12, 60, 12]);
+
+            let timer = setTimeout(close, 15000);
+            function close() {
+                clearTimeout(timer);
+                el.classList.add('is-leaving');
+                setTimeout(() => el.remove(), 280);
+            }
+            el.addEventListener('click', async (e) => {
+                const b = e.target.closest('[data-act]');
+                if (!b) return;
+                clearTimeout(timer);
+                setLoading(b, true);
+                const ok = b.dataset.act === 'yes' ? await acceptFriendRequest(req) : await declineFriendRequest(req);
+                if (ok) close(); else setLoading(b, false);
+            });
+            // swipe up to dismiss (request stays in the chat page list)
+            let startY = null;
+            el.addEventListener('pointerdown', (e) => { if (!e.target.closest('button')) startY = e.clientY; });
+            el.addEventListener('pointerup', (e) => { if (startY !== null && startY - e.clientY > 30) close(); startY = null; });
+        }
+
+        window.PingUI = {
+            isGuestUser, requireGoogle,
+            liveProfile, nameHTML,
+            startSocial, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, sendFriendRequest,
+            getFriendRequests: () => ({ incoming: social.incoming, outgoing: social.outgoing }),
+            CATALOG, STREAK, LIKE_POINTS, claimLikeRewards,
+            uploadImage, uploadErrorMessage, compressImage,
+            dayKey, addDays, streakApplySend, streakStatus, streakApplyRestore, streakClaim,
+            timeAgo,
+            icon, escapeHtml, safeUrl, initialOf, avatarHTML, gradClass, formatNumber,
+            toast, openModal, closeModal, confirm: confirmDialog, setLoading, setPoints, setNavBadge, hydrate,
+            logo: LOGO
+        };
+    })();
+    </script>
+    <!-- Ping shared design system -->
+    <style>
+    /* ==========================================================================
+       Ping – shared design system
+       ========================================================================== */
+
+    :root {
+        --bg: #F7F5F0;
+        --surface: #FFFFFF;
+        --surface-2: #F3F0E8;
+        --border: #E9E4D8;
+        --ink: #1C1917;
+        --ink-2: #57534E;
+        --muted: #8A847A;
+
+        --brand: #FFC400;
+        --brand-hover: #F2B600;
+        --brand-soft: #FFF6D1;
+        --brand-ink: #6B4E00;
+
+        --danger: #E11D48;
+        --danger-soft: #FFE4E9;
+        --success: #059669;
+        --success-soft: #DCFCE7;
+
+        --radius-sm: 10px;
+        --radius: 16px;
+        --radius-lg: 24px;
+        --shadow-sm: 0 1px 2px rgba(28, 25, 23, .06), 0 1px 1px rgba(28, 25, 23, .04);
+        --shadow-md: 0 8px 24px -8px rgba(28, 25, 23, .14), 0 2px 6px rgba(28, 25, 23, .05);
+        --shadow-lg: 0 24px 48px -12px rgba(28, 25, 23, .25);
+
+        --header-h: 60px;
+        --nav-h: 64px;
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { -webkit-tap-highlight-color: transparent; }
+
+    html, body { height: 100%; }
+
+    body {
+        margin: 0;
+        font-family: 'Heebo', 'Assistant', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* App shell ---------------------------------------------------------------- */
+    .app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .app-main {
+        flex: 1;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .app-content {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 16px 16px 28px;
+    }
+
+    .app-header {
+        position: relative;
+        z-index: 30;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: var(--header-h);
+        padding: calc(var(--safe-top) + 8px) 16px 8px;
+        background: rgba(255, 255, 255, .86);
+        backdrop-filter: saturate(180%) blur(16px);
+        -webkit-backdrop-filter: saturate(180%) blur(16px);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .app-header__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .app-header__title h1 { font-size: 18px; font-weight: 800; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+    .app-header__title p { font-size: 12px; color: var(--muted); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .app-header__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    /* Logo mark */
+    .ping-logo {
+        width: 38px; height: 38px;
+        border-radius: 12px;
+        background: var(--brand);
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .06);
+    }
+    .ping-logo svg { width: 64%; height: 64%; }
+    .ping-logo--lg { width: 72px; height: 72px; border-radius: 22px; }
+
+    /* Bottom navigation ------------------------------------------------------ */
+    .bottom-nav {
+        position: relative;
+        z-index: 30;
+        flex-shrink: 0;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        height: calc(var(--nav-h) + var(--safe-bottom));
+        padding-bottom: var(--safe-bottom);
+        background: rgba(255, 255, 255, .92);
+        backdrop-filter: saturate(180%) blur(16px);
+        -webkit-backdrop-filter: saturate(180%) blur(16px);
+        border-top: 1px solid var(--border);
+    }
+
+    .nav-item {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 3px;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 11px; font-weight: 500;
+        position: relative;
+        transition: color .15s ease;
+    }
+    .nav-item:hover { color: var(--ink-2); }
+    .nav-item__icon {
+        width: 52px; height: 30px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 999px;
+        transition: background-color .2s ease, transform .2s ease;
+    }
+    .nav-item__icon svg { width: 22px; height: 22px; }
+    .nav-item:active .nav-item__icon { transform: scale(.92); }
+    .nav-item[aria-current="page"] { color: var(--ink); font-weight: 700; }
+    .nav-item[aria-current="page"] .nav-item__icon { background: var(--brand-soft); color: var(--brand-ink); }
+    .nav-item__badge {
+        position: absolute; top: 6px; inset-inline-start: calc(50% + 8px);
+        min-width: 16px; height: 16px; padding: 0 4px;
+        border-radius: 999px; background: var(--danger); color: #fff;
+        font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+        border: 2px solid #fff; box-sizing: content-box;
+    }
+
+    /* Buttons ------------------------------------------------------------------ */
+    .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        min-height: 44px;
+        padding: 0 18px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        font: inherit; font-size: 15px; font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease, box-shadow .15s ease;
+        user-select: none;
+    }
+    .btn:active:not(:disabled) { transform: scale(.97); }
+    .btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+    .btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .btn-block { width: 100%; }
+    .btn-sm { min-height: 36px; padding: 0 14px; font-size: 13px; border-radius: 12px; }
+    .btn-lg { min-height: 52px; font-size: 16px; border-radius: 16px; }
+
+    .btn-primary { background: var(--brand); color: var(--ink); box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 6px 16px -6px rgba(242, 182, 0, .55); }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+    .btn-dark { background: var(--ink); color: #fff; }
+    .btn-dark:hover:not(:disabled) { background: #000; }
+    .btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: var(--surface-2); }
+    .btn-soft { background: var(--surface-2); color: var(--ink); }
+    .btn-soft:hover:not(:disabled) { background: #ECE8DE; }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+    .btn-danger:hover:not(:disabled) { background: #FFD3DC; }
+    .btn-success { background: var(--success-soft); color: var(--success); }
+    .btn-ghost { background: transparent; color: var(--ink-2); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+
+    .icon-btn {
+        width: 40px; height: 40px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        background: var(--surface-2);
+        color: var(--ink-2);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background-color .15s ease, transform .1s ease, color .15s ease;
+    }
+    .icon-btn:hover:not(:disabled) { background: #ECE8DE; color: var(--ink); }
+    .icon-btn:active:not(:disabled) { transform: scale(.94); }
+    .icon-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .icon-btn--brand { background: var(--brand); color: var(--ink); }
+    .icon-btn--brand:hover:not(:disabled) { background: var(--brand-hover); color: var(--ink); }
+    .icon-btn--plain { background: transparent; }
+
+    :where(button, a, input, textarea, select, [tabindex]):focus-visible {
+        outline: 3px solid rgba(255, 196, 0, .65);
+        outline-offset: 2px;
+    }
+
+    /* Loading state on buttons */
+    .is-loading { position: relative; color: transparent !important; pointer-events: none; }
+    .is-loading > * { visibility: hidden; }
+    .is-loading::after {
+        content: ""; position: absolute; inset: 0; margin: auto;
+        width: 18px; height: 18px; border-radius: 50%;
+        border: 2.5px solid rgba(28, 25, 23, .25); border-top-color: var(--ink);
+        animation: ping-spin .7s linear infinite;
+    }
+    .btn-dark.is-loading::after { border-color: rgba(255,255,255,.3); border-top-color: #fff; }
+
+    .spinner {
+        width: 22px; height: 22px; border-radius: 50%;
+        border: 2.5px solid rgba(28, 25, 23, .15); border-top-color: var(--ink);
+        animation: ping-spin .7s linear infinite;
+    }
+    @keyframes ping-spin { to { transform: rotate(360deg); } }
+
+    /* Cards, chips, sections ------------------------------------------------- */
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+    }
+    .card-pad { padding: 20px; }
+
+    .section { margin-top: 28px; }
+    .section:first-child { margin-top: 0; }
+    .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 4px 12px; }
+    .section-title { font-size: 17px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+    .section-sub { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+
+    .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        height: 28px; padding: 0 10px;
+        border-radius: 999px;
+        font-size: 12px; font-weight: 700;
+        background: var(--surface-2); color: var(--ink-2);
+        white-space: nowrap;
+    }
+    .chip svg { width: 14px; height: 14px; }
+    .chip--brand { background: var(--brand-soft); color: var(--brand-ink); }
+    .chip--success { background: var(--success-soft); color: var(--success); }
+    .chip--danger { background: var(--danger-soft); color: var(--danger); }
+
+    .points-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        height: 36px; padding: 0 12px 0 10px;
+        border-radius: 999px;
+        background: var(--brand-soft);
+        color: var(--brand-ink);
+        font-weight: 800; font-size: 14px;
+        text-decoration: none;
+        font-variant-numeric: tabular-nums;
+        transition: background-color .15s ease;
+    }
+    .points-chip:hover { background: #FFEFB0; }
+    .points-chip .coin {
+        width: 20px; height: 20px; border-radius: 50%;
+        background: var(--brand); color: var(--ink);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 900;
+        box-shadow: inset 0 -2px 0 rgba(0,0,0,.1);
+    }
+    .points-chip.bump { animation: ping-bump .45s ease; }
+    @keyframes ping-bump { 30% { transform: scale(1.12); } }
+
+    /* Forms ------------------------------------------------------------------ */
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field-label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+    .field-hint { font-size: 12px; color: var(--muted); }
+    .field-error { font-size: 12px; color: var(--danger); font-weight: 500; }
+
+    .input {
+        width: 100%;
+        min-height: 48px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1.5px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit; font-size: 15px;
+        transition: border-color .15s ease, box-shadow .15s ease;
+        box-sizing: border-box;
+    }
+    .input::placeholder { color: #B2ACA1; }
+    .input:focus { outline: none; border-color: var(--brand-hover); box-shadow: 0 0 0 4px rgba(255, 196, 0, .2); }
+    .input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 4px rgba(225, 29, 72, .1); }
+
+    .input-group { position: relative; }
+    .input-group .input { padding-inline-start: 36px; }
+    .input-group__prefix {
+        position: absolute; inset-inline-start: 14px; top: 0; bottom: 0;
+        display: flex; align-items: center;
+        color: var(--muted); font-weight: 700; pointer-events: none;
+    }
+
+    /* Switch (RTL aware) */
+    .switch {
+        position: relative;
+        width: 50px; height: 30px;
+        border-radius: 999px;
+        border: 0;
+        background: #DCD7CC;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background-color .2s ease;
+    }
+    .switch::after {
+        content: "";
+        position: absolute; top: 3px; inset-inline-start: 3px;
+        width: 24px; height: 24px; border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,.2);
+        transition: transform .22s cubic-bezier(.3, 1.4, .6, 1);
+    }
+    .switch[aria-checked="true"] { background: var(--success); }
+    [dir="rtl"] .switch[aria-checked="true"]::after { transform: translateX(-20px); }
+    [dir="ltr"] .switch[aria-checked="true"]::after { transform: translateX(20px); }
+    .switch:disabled { opacity: .6; cursor: wait; }
+
+    /* Segmented amount chips */
+    .amount-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .amount-option {
+        min-height: 40px; border-radius: 12px;
+        border: 1.5px solid var(--border); background: var(--surface);
+        font: inherit; font-weight: 700; font-size: 14px; color: var(--ink-2);
+        cursor: pointer; transition: all .15s ease;
+    }
+    .amount-option:hover { border-color: #D6CFBF; }
+    .amount-option[aria-pressed="true"] { border-color: var(--brand-hover); background: var(--brand-soft); color: var(--brand-ink); }
+
+    /* List rows (settings) --------------------------------------------------- */
+    .list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+    .list-row {
+        width: 100%;
+        display: flex; align-items: center; gap: 14px;
+        padding: 14px 16px;
+        min-height: 60px;
+        background: transparent; border: 0;
+        font: inherit; color: inherit; text-align: start;
+        box-sizing: border-box;
+        text-decoration: none;
+    }
+    .list-row + .list-row { border-top: 1px solid var(--border); }
+    button.list-row, a.list-row { cursor: pointer; transition: background-color .15s ease; }
+    button.list-row:hover, a.list-row:hover { background: #FBFAF7; }
+    .list-row__icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        background: var(--surface-2); color: var(--ink-2);
+    }
+    .list-row__icon svg { width: 20px; height: 20px; }
+    .list-row__body { flex: 1; min-width: 0; }
+    .list-row__title { font-size: 15px; font-weight: 600; }
+    .list-row__sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+    .list-row__value { font-size: 14px; color: var(--muted); font-weight: 600; }
+    .list-row__chevron { width: 18px; height: 18px; color: #C2BCB0; flex-shrink: 0; }
+    [dir="rtl"] .list-row__chevron { transform: scaleX(-1); }
+
+    /* Avatars & cosmetic items ---------------------------------------------- */
+    .avatar {
+        position: relative;
+        border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        background: linear-gradient(135deg, #FFE27A, #FFC400);
+        color: var(--brand-ink);
+        font-weight: 800;
+        overflow: visible;
+    }
+    .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+    .avatar--xs { width: 28px; height: 28px; font-size: 12px; }
+    .avatar--sm { width: 36px; height: 36px; font-size: 14px; }
+    .avatar--md { width: 48px; height: 48px; font-size: 18px; }
+    .avatar--lg { width: 64px; height: 64px; font-size: 24px; }
+    .avatar--xl { width: 112px; height: 112px; font-size: 40px; }
+
+    /* Frames – both naming conventions are supported (frame_gold & frame-gold) */
+    .frame-gold, .frame_gold { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #F5B700, 0 0 18px 4px rgba(245, 183, 0, .55); }
+    .frame-neon, .frame_neon { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #3B82F6, 0 0 18px 4px rgba(59, 130, 246, .55); }
+    .frame-fire, .frame_fire { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #EF4444, 0 0 18px 4px rgba(239, 68, 68, .55); }
+    .frame-purple, .frame_purple { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #A855F7, 0 0 18px 4px rgba(168, 85, 247, .55); }
+    .avatar--xs.frame_gold, .avatar--xs.frame_neon, .avatar--xs.frame_fire, .avatar--xs.frame_purple,
+    .avatar--sm.frame_gold, .avatar--sm.frame_neon, .avatar--sm.frame_fire, .avatar--sm.frame_purple { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--frame-c, #F5B700), 0 0 10px 2px var(--frame-glow, rgba(245,183,0,.5)); }
+    .frame_neon, .frame-neon { --frame-c: #3B82F6; --frame-glow: rgba(59,130,246,.5); }
+    .frame_fire, .frame-fire { --frame-c: #EF4444; --frame-glow: rgba(239,68,68,.5); }
+    .frame_purple, .frame-purple { --frame-c: #A855F7; --frame-glow: rgba(168,85,247,.5); }
+
+    .grad-sunset, .grad_sunset, .grad-ocean, .grad_ocean, .grad-neon, .grad_neon, .grad-cosmic, .grad_cosmic {
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .grad-sunset, .grad_sunset { background-image: linear-gradient(135deg, #FF6A3D, #FF9E5E 50%, #F43F5E); }
+    .grad-ocean, .grad_ocean { background-image: linear-gradient(135deg, #06B6D4, #2563EB); }
+    .grad-neon, .grad_neon { background-image: linear-gradient(135deg, #10B981, #EAB308); }
+    .grad-cosmic, .grad_cosmic { background-image: linear-gradient(135deg, #7C3AED, #EC4899); }
+
+    /* Selectable tile (inventory / shop) */
+    .tile {
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 12px;
+        padding: 20px 12px 14px;
+        border-radius: 20px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        font: inherit; color: inherit; text-align: center;
+        transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    button.tile { cursor: pointer; }
+    button.tile:hover { border-color: #D6CFBF; }
+    button.tile:active { transform: scale(.98); }
+    .tile[aria-pressed="true"] { border-color: var(--brand-hover); box-shadow: 0 0 0 3px rgba(255, 196, 0, .25); }
+    .tile__check {
+        position: absolute; top: 10px; inset-inline-end: 10px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: var(--brand); color: var(--ink);
+        display: none; align-items: center; justify-content: center;
+    }
+    .tile__check svg { width: 14px; height: 14px; }
+    .tile[aria-pressed="true"] .tile__check { display: flex; }
+    .tile__title { font-size: 14px; font-weight: 700; }
+    .tile__sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Empty states ------------------------------------------------------------ */
+    .empty {
+        display: flex; flex-direction: column; align-items: center; text-align: center;
+        padding: 32px 20px;
+        color: var(--muted);
+    }
+    .empty__icon {
+        width: 56px; height: 56px; border-radius: 18px;
+        background: var(--brand-soft); color: var(--brand-ink);
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 14px;
+    }
+    .empty__icon svg { width: 28px; height: 28px; }
+    .empty__title { font-size: 16px; font-weight: 700; color: var(--ink); }
+    .empty__text { font-size: 14px; margin-top: 4px; max-width: 280px; line-height: 1.5; }
+
+    /* Skeleton */
+    .skeleton {
+        background: linear-gradient(90deg, #EFEBE3 25%, #F7F4EE 50%, #EFEBE3 75%);
+        background-size: 200% 100%;
+        animation: ping-shimmer 1.2s infinite;
+        border-radius: 8px;
+    }
+    @keyframes ping-shimmer { to { background-position: -200% 0; } }
+
+    /* Modals & sheets ---------------------------------------------------------- */
+    .modal {
+        position: fixed; inset: 0; z-index: 60;
+        display: none;
+        align-items: flex-end; justify-content: center;
+        padding: 0;
+        background: rgba(28, 25, 23, .45);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+    .modal.is-open { display: flex; animation: ping-fade .2s ease; }
+    .modal__panel {
+        width: 100%; max-width: 440px;
+        max-height: calc(100dvh - 40px);
+        overflow-y: auto;
+        background: var(--surface);
+        border-radius: 28px 28px 0 0;
+        padding: 12px 20px calc(20px + var(--safe-bottom));
+        box-shadow: var(--shadow-lg);
+        animation: ping-sheet-up .28s cubic-bezier(.2, .9, .3, 1.05);
+        box-sizing: border-box;
+    }
+    .modal__grabber { width: 40px; height: 5px; border-radius: 999px; background: #E2DDD2; margin: 0 auto 12px; }
+    .modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .modal__title { font-size: 19px; font-weight: 800; margin: 0; }
+    .modal__text { font-size: 14.5px; color: var(--ink-2); line-height: 1.6; margin: 0; }
+    .modal__actions { display: flex; gap: 10px; margin-top: 20px; }
+    .modal__actions .btn { flex: 1; }
+    .modal__hero {
+        width: 64px; height: 64px; border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
+        margin: 4px auto 14px;
+        background: var(--brand-soft); color: var(--brand-ink);
+    }
+    .modal__hero svg { width: 30px; height: 30px; }
+    .modal__hero--danger { background: var(--danger-soft); color: var(--danger); }
+
+    @media (min-width: 640px) {
+        .modal { align-items: center; padding: 20px; }
+        .modal__panel { border-radius: 28px; padding: 20px 24px 24px; animation: ping-pop .22s cubic-bezier(.2, .9, .3, 1.1); }
+        .modal__grabber { display: none; }
+    }
+
+    @keyframes ping-fade { from { opacity: 0; } }
+    @keyframes ping-sheet-up { from { transform: translateY(40px); opacity: .4; } }
+    @keyframes ping-pop { from { transform: scale(.94); opacity: 0; } }
+
+    /* Toasts ------------------------------------------------------------------ */
+    .toast-region {
+        position: fixed; z-index: 80;
+        top: calc(var(--safe-top) + 12px);
+        left: 12px; right: 12px;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        pointer-events: none;
+    }
+    .toast {
+        pointer-events: auto;
+        display: flex; align-items: center; gap: 10px;
+        max-width: 420px; width: max-content;
+        padding: 10px 14px 10px 12px;
+        border-radius: 16px;
+        background: var(--ink); color: #fff;
+        font-size: 14px; font-weight: 500;
+        box-shadow: var(--shadow-lg);
+        animation: ping-toast-in .3s cubic-bezier(.2, .9, .3, 1.2);
+    }
+    .toast.is-leaving { animation: ping-toast-out .2s ease forwards; }
+    .toast__icon {
+        width: 24px; height: 24px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        background: rgba(255,255,255,.14);
+    }
+    .toast__icon svg { width: 15px; height: 15px; }
+    .toast--success .toast__icon { background: #10B981; }
+    .toast--error .toast__icon { background: #F43F5E; }
+    .toast--points .toast__icon { background: var(--brand); color: var(--ink); }
+    .toast__action {
+        margin-inline-start: 6px;
+        background: none; border: 0; padding: 4px 6px; border-radius: 8px;
+        color: var(--brand); font: inherit; font-weight: 700; cursor: pointer; text-decoration: none;
+    }
+    .toast__action:hover { background: rgba(255,255,255,.1); }
+    @keyframes ping-toast-in { from { transform: translateY(-16px) scale(.96); opacity: 0; } }
+    @keyframes ping-toast-out { to { transform: translateY(-10px); opacity: 0; } }
+
+    /* Utilities --------------------------------------------------------------- */
+    .fade-in { animation: ping-fade-up .3s ease both; }
+    @keyframes ping-fade-up { from { opacity: 0; transform: translateY(6px); } }
+
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    .scroll-x { overflow-x: auto; scrollbar-width: none; }
+    .scroll-x::-webkit-scrollbar { display: none; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #DDD7CB; border-radius: 8px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* ---------- Friend-request popup (top of screen) ---------- */
+    .req-banners {
+        position: fixed; z-index: 85; top: calc(var(--safe-top) + 10px); left: 10px; right: 10px;
+        display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+    }
+    .req-banner {
+        pointer-events: auto; width: 100%; max-width: 420px; box-sizing: border-box;
+        display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+        background: rgba(255,255,255,.97); border: 1px solid var(--border); border-radius: 22px;
+        box-shadow: 0 18px 40px -12px rgba(28,25,23,.35), 0 2px 6px rgba(28,25,23,.08);
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        animation: req-in .5s cubic-bezier(.2, 1.3, .4, 1) both; touch-action: pan-y;
+    }
+    .req-banner.is-leaving { animation: req-out .28s ease forwards; }
+    @keyframes req-in { from { transform: translateY(-130%) scale(.96); opacity: 0; } }
+    @keyframes req-out { to { transform: translateY(-120%); opacity: 0; } }
+    .req-banner__body { flex: 1; min-width: 0; line-height: 1.3; }
+    .req-banner__title { font-weight: 800; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .req-banner__sub { font-size: 12.5px; color: var(--muted); }
+    .req-btn {
+        width: 42px; height: 42px; border-radius: 50%; border: 0; flex-shrink: 0; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: transform .1s ease, background-color .15s ease;
+    }
+    .req-btn:active { transform: scale(.9); }
+    .req-btn svg { width: 20px; height: 20px; }
+    .req-btn--yes { background: #10B981; color: #fff; box-shadow: 0 6px 14px -6px rgba(16,185,129,.7); }
+    .req-btn--yes:hover { background: #059669; }
+    .req-btn--no { background: var(--surface-2); color: var(--ink-2); }
+    .req-btn--no:hover { background: #ECE8DE; }
+    .req-btn.is-loading::after { border-color: rgba(255,255,255,.35); border-top-color: #fff; }
+    .req-banner__bar { position: absolute; }
+
+    /* ---------- Splash screen (2s, once per app session) ---------- */
+    html.ping-splashing { background: #FFC400; }
+    html.ping-splashing body { overflow: hidden; }
+    html.ping-splashing body > :not(.splash) { opacity: 0; }
+    .splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+        background: radial-gradient(circle at 50% 42%, #FFD95A 0%, #FFC400 55%, #F5B000 100%);
+        color: #fff; overflow: hidden;
+    }
+    .splash.is-leaving { animation: splash-out .38s cubic-bezier(.4, 0, .2, 1) forwards; }
+    @keyframes splash-out { to { opacity: 0; transform: scale(1.08); } }
+    .splash__stage { position: relative; width: 132px; height: 132px; display: flex; align-items: center; justify-content: center; }
+    .splash__ring {
+        position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgba(255,255,255,.75);
+        opacity: 0; animation: splash-ring 1.6s cubic-bezier(.2, .6, .3, 1) infinite;
+    }
+    .splash__ring:nth-child(2) { animation-delay: .45s; }
+    .splash__ring:nth-child(3) { animation-delay: .9s; }
+    @keyframes splash-ring { 0% { transform: scale(.55); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+    .splash__logo { width: 112px; height: 112px; animation: splash-pop .6s cubic-bezier(.2, 1.5, .4, 1) both; filter: drop-shadow(0 10px 24px rgba(160, 100, 0, .35)); }
+    @keyframes splash-pop { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
+    .splash__logo path { stroke-dasharray: 130; stroke-dashoffset: 130; animation: splash-draw .7s ease forwards; }
+    .splash__logo path:nth-of-type(2) { animation-delay: .12s; }
+    .splash__logo path:nth-of-type(3) { animation-delay: .24s; }
+    .splash__logo path:nth-of-type(4) { animation-delay: .36s; }
+    .splash__logo circle { transform-origin: 28px 32px; animation: splash-dot .5s .1s cubic-bezier(.2, 1.6, .4, 1) both; }
+    @keyframes splash-draw { to { stroke-dashoffset: 0; } }
+    @keyframes splash-dot { from { transform: scale(0); } }
+    .splash__word { font-size: 44px; font-weight: 900; letter-spacing: -.02em; line-height: 1; text-shadow: 0 4px 16px rgba(160, 100, 0, .3); }
+    .splash__word span { display: inline-block; animation: splash-letter .5s cubic-bezier(.2, 1.4, .4, 1) both; }
+    .splash__word span:nth-child(1) { animation-delay: .55s; }
+    .splash__word span:nth-child(2) { animation-delay: .62s; }
+    .splash__word span:nth-child(3) { animation-delay: .69s; }
+    .splash__word span:nth-child(4) { animation-delay: .76s; }
+    @keyframes splash-letter { from { transform: translateY(24px); opacity: 0; } }
+    .splash__tag { font-size: 15px; font-weight: 600; color: rgba(255,255,255,.92); animation: ping-fade-up .5s 1s ease both; }
+
+    /* ---------- App-wide motion ---------- */
+    .app-header { animation: anim-header .45s cubic-bezier(.2, .8, .3, 1) both; }
+    @keyframes anim-header { from { transform: translateY(-12px); opacity: 0; } }
+    .bottom-nav { animation: anim-nav .45s cubic-bezier(.2, .8, .3, 1) both; }
+    @keyframes anim-nav { from { transform: translateY(16px); opacity: 0; } }
+    .app-content > *, .feed > .post, .messages > .empty { animation: ping-fade-up .45s cubic-bezier(.2, .8, .3, 1) both; }
+    .app-content > :nth-child(2) { animation-delay: .05s; }
+    .app-content > :nth-child(3) { animation-delay: .1s; }
+    .app-content > :nth-child(4) { animation-delay: .15s; }
+    .app-content > :nth-child(5) { animation-delay: .2s; }
+    .app-content > :nth-child(n+6) { animation-delay: .25s; }
+    .grid > .tile { animation: ping-fade-up .4s cubic-bezier(.2, .8, .3, 1) both; }
+    .grid > .tile:nth-child(2) { animation-delay: .04s; }
+    .grid > .tile:nth-child(3) { animation-delay: .08s; }
+    .grid > .tile:nth-child(4) { animation-delay: .12s; }
+    .grid > .tile:nth-child(n+5) { animation-delay: .16s; }
+
+    .nav-item[aria-current="page"] .nav-item__icon { animation: nav-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+    @keyframes nav-pop { 0% { transform: scale(.7); } 100% { transform: scale(1); } }
+    .card { transition: transform .18s ease, box-shadow .18s ease; }
+    a.card:active, button.card:active, a.tile:active, button.tile:active { transform: scale(.98); }
+    .empty__icon { animation: empty-float 3s ease-in-out infinite; }
+    @keyframes empty-float { 50% { transform: translateY(-5px); } }
+    .avatar[class*="frame_"] { animation: frame-glow 2.6s ease-in-out infinite; }
+    @keyframes frame-glow { 50% { filter: brightness(1.12) saturate(1.25); } }
+    .modal.is-open .modal__panel > * { animation: ping-fade-up .3s .05s ease both; }
+
+    /* entry animations wait for the splash, and play only on first load (not on every re-render) */
+    html.ping-splashing .app-header, html.ping-splashing .bottom-nav, html.ping-splashing .app-content > *,
+    html.ping-splashing .feed > .post, html.ping-splashing .grid > .tile { animation-play-state: paused; }
+    body.anim-settled .app-content > *, body.anim-settled .feed > .post:not(.fade-in),
+    body.anim-settled .grid > .tile, body.anim-settled .messages > .empty { animation: none; }
+
+    body.page-leave .app-main, body.page-leave .app-header__title { animation: page-leave .16s ease forwards; }
+    @keyframes page-leave { to { opacity: 0; transform: translateY(6px); } }
+
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+    </style>
+
+    <style>
+        /* Conversations strip */
+        .convo-strip { display: flex; gap: 14px; padding: 12px 16px 10px; background: rgba(255,255,255,.86); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .convo {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            width: 60px; flex-shrink: 0;
+            background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink-2);
+        }
+        .convo__ring { display: flex; position: relative; padding: 3px; border-radius: 50%; border: 2px solid transparent; transition: border-color .15s ease; }
+        .convo[aria-current="true"] .convo__ring { border-color: var(--brand-hover); }
+        .convo[aria-current="true"] .convo__label { color: var(--ink); font-weight: 700; }
+        .convo__label { font-size: 12px; font-weight: 500; max-width: 64px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .convo__badge {
+            position: absolute; top: -2px; inset-inline-end: -2px;
+            min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+            background: var(--danger); color: #fff; border: 2px solid #fff;
+            font-size: 11px; font-weight: 800; line-height: 16px; text-align: center; box-sizing: border-box;
+            animation: ping-bump .35s ease;
+        }
+        /* Friend requests panel */
+        .requests { flex-shrink: 0; background: #FFFBEA; border-bottom: 1px solid #FFE7A3; animation: ping-fade-up .3s ease both; }
+        .requests__head {
+            width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+            background: none; border: 0; font: inherit; font-weight: 800; font-size: 14px; color: var(--ink); cursor: pointer;
+        }
+        .requests__icon { width: 30px; height: 30px; border-radius: 10px; background: var(--brand); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; }
+        .requests__icon svg { width: 17px; height: 17px; }
+        .requests__count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 12px; line-height: 22px; text-align: center; box-sizing: border-box; }
+        .requests__chev { width: 18px; height: 18px; color: var(--muted); transition: transform .2s ease; }
+        .requests__head[aria-expanded="false"] .requests__chev { transform: rotate(180deg); }
+        .requests__list { max-height: 34vh; overflow-y: auto; padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+        .requests__head[aria-expanded="false"] + .requests__list { display: none; }
+        .req-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #fff; border: 1px solid var(--border); border-radius: 18px; animation: ping-fade-up .3s ease both; }
+        .req-row.is-leaving { animation: req-row-out .3s ease forwards; }
+        @keyframes req-row-out { to { opacity: 0; transform: translateX(-30px); } }
+        .req-row__body { flex: 1; min-width: 0; line-height: 1.3; }
+        .req-row__name { font-weight: 800; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .req-row__sub { font-size: 12px; color: var(--muted); }
+        .req-row .req-btn { width: 38px; height: 38px; }
+        .out-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: var(--surface-2); }
+
+        /* Gift bubbles with accept / decline */
+        .gift-actions { display: flex; gap: 8px; margin-top: 12px; }
+        .gift-actions .btn { flex: 1; }
+        .bubble--gift-declined { background: var(--surface-2); border: 1px dashed #D6CFBF; color: var(--muted); }
+
+        .convo__streak {
+            position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+            padding: 1px 6px; border-radius: 999px; background: #fff; border: 1px solid #FFD8A8;
+            font-size: 11px; font-weight: 800; color: #C2410C; white-space: nowrap; line-height: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+        .convo__streak.is-risk { border-color: #FCA5A5; color: #B91C1C; }
+
+        .streak-chip {
+            position: relative; display: inline-flex; align-items: center; gap: 4px;
+            height: 36px; padding: 0 12px; border-radius: 999px; border: 0; cursor: pointer;
+            font: inherit; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums;
+            background: #FFEDD5; color: #C2410C; transition: transform .1s ease;
+        }
+        .streak-chip:active { transform: scale(.95); }
+        .streak-chip[data-state="atRisk"] { background: #FEE2E2; color: #B91C1C; }
+        .streak-chip[data-state="none"], .streak-chip[data-state="broken"], .streak-chip[data-state="restorable"] { background: var(--surface-2); color: var(--muted); filter: grayscale(.4); }
+        .streak-chip__dot { position: absolute; top: 2px; inset-inline-end: 2px; width: 9px; height: 9px; border-radius: 50%; background: var(--danger); border: 2px solid #fff; }
+        .streak-hero { font-size: 56px; line-height: 1; animation: ping-bump .6s ease; }
+        .streak-hero.is-off { filter: grayscale(1); opacity: .5; }
+        .streak-progress { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+        .streak-progress > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #FB923C, #F97316); min-width: 6px; transition: width .4s ease; }
+        [dir="rtl"] .streak-progress > span { margin-inline-start: 0; }
+
+        .convo--add .avatar { background: var(--surface-2); color: var(--ink-2); border: 1.5px dashed #CFC8B9; }
+        .convo--add .avatar svg { width: 22px; height: 22px; }
+        .convo .avatar--lg { width: 52px; height: 52px; font-size: 20px; }
+        .community-avatar { background: var(--brand) !important; color: var(--ink) !important; }
+        .community-avatar svg { width: 24px; height: 24px; }
+
+        /* Messages */
+        .messages { padding: 16px 12px 12px; display: flex; flex-direction: column; gap: 2px; max-width: 760px; margin: 0 auto; }
+        .msg-row { display: flex; align-items: flex-end; gap: 8px; }
+        .msg-row--me { flex-direction: row-reverse; }
+        .msg-row.group-start { margin-top: 12px; }
+        .msg-avatar-slot { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
+        .msg-row { position: relative; }
+        .msg-row .bubble { transition: transform .15s ease, filter .15s ease; -webkit-touch-callout: none; }
+        .msg-row.is-pressed .bubble { transform: scale(.96); filter: brightness(.94); }
+        .msg-row.msg-deleting { animation: msg-out .3s ease forwards; pointer-events: none; }
+        @keyframes msg-out { to { opacity: 0; transform: scale(.85); max-height: 0; margin: 0; } }
+        .msg-more {
+            align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 0;
+            background: transparent; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer;
+            opacity: 0; transition: opacity .15s ease, background-color .15s ease; flex-shrink: 0;
+        }
+        .msg-more:hover { background: var(--surface-2); }
+        @media (hover: hover) { .msg-row:hover .msg-more { opacity: 1; } }
+        @media (hover: none) { .msg-more { display: none; } }        .msg-col { display: flex; flex-direction: column; max-width: min(78%, 520px); min-width: 0; }
+        .msg-row--me .msg-col { align-items: flex-end; }
+        .msg-row:not(.msg-row--me) .msg-col { align-items: flex-start; }
+        .msg-name { display: flex; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 700; margin: 0 10px 3px; }
+        .msg-name small { font-weight: 500; color: var(--muted); }
+
+        .bubble {
+            position: relative;
+            padding: 8px 12px 6px;
+            border-radius: 18px;
+            font-size: 15px; line-height: 1.45;
+            word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap;
+            box-shadow: var(--shadow-sm);
+        }
+        .bubble--special, .bubble--gift-done, .bubble--gift-declined, .bubble--media { white-space: normal; }
+        .bubble--them { background: var(--surface); border: 1px solid var(--border); }
+        .bubble--me { background: var(--brand); color: var(--ink); }
+        .msg-row:not(.msg-row--me).group-start .bubble { border-start-start-radius: 6px; }
+        .msg-row--me.group-start .bubble { border-start-end-radius: 6px; }
+        .bubble__meta { display: inline-flex; align-items: center; gap: 3px; float: inline-end; margin-inline-start: 10px; margin-top: 6px; font-size: 10.5px; color: var(--muted); line-height: 1; white-space: nowrap; }
+        .bubble--me .bubble__meta { color: rgba(28,25,23,.55); }
+        .bubble--media { padding: 4px; background: var(--surface); border: 1px solid var(--border); }
+        .bubble--media img { display: block; max-width: 100%; max-height: 320px; border-radius: 14px; cursor: zoom-in; background: var(--surface-2); min-width: 120px; min-height: 80px; object-fit: cover; }
+        .bubble--media .bubble__meta { position: absolute; bottom: 10px; inset-inline-end: 10px; background: rgba(0,0,0,.5); color: #fff; padding: 3px 6px; border-radius: 8px; float: none; margin: 0; }
+
+        .bubble--special { padding: 12px 14px; background: linear-gradient(135deg, #FFF6D1, #FFE9A0); border: 1px solid #FFE07A; color: var(--brand-ink); }
+        .bubble--gift-done { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); }
+        .special-head { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+        .special-icon { width: 36px; height: 36px; border-radius: 12px; background: rgba(255,255,255,.75); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .special-icon svg { width: 20px; height: 20px; }
+
+        .day-sep { align-self: center; margin: 18px 0 6px; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.9); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--ink-2); }
+        .msg-new { animation: ping-fade-up .25s ease both; }
+
+        .jump-btn {
+            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+            display: none; align-items: center; gap: 6px;
+            height: 36px; padding: 0 14px; border-radius: 999px;
+            background: var(--ink); color: #fff; border: 0; font: inherit; font-size: 13px; font-weight: 700;
+            box-shadow: var(--shadow-md); cursor: pointer; z-index: 5;
+        }
+        .jump-btn.is-visible { display: inline-flex; animation: ping-fade-up .2s ease; }
+
+        /* Composer */
+        .composer { flex-shrink: 0; background: rgba(255,255,255,.92); border-top: 1px solid var(--border); padding: 8px 12px; }
+        .composer form { display: flex; align-items: flex-end; gap: 8px; max-width: 760px; margin: 0 auto; }
+        .composer__input {
+            flex: 1; min-height: 44px; max-height: 140px; resize: none;
+            padding: 11px 16px; border-radius: 22px;
+            border: 1.5px solid var(--border); background: var(--surface-2);
+            font: inherit; font-size: 15px; line-height: 1.4; color: var(--ink);
+            transition: border-color .15s ease, background-color .15s ease;
+            box-sizing: border-box;
+        }
+        .composer__input:focus { outline: none; border-color: var(--brand-hover); background: #fff; }
+        .composer .icon-btn { width: 44px; height: 44px; border-radius: 50%; }
+        [dir="rtl"] #send-btn svg { transform: scaleX(-1); }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <header class="app-header">
+        <div class="app-header__title">
+            <div id="convo-avatar"><span class="avatar avatar--sm community-avatar" data-icon="users"></span></div>
+            <div class="min-w-0">
+                <h1 id="chat-title">הצ'אט הקהילתי</h1>
+                <p id="chat-subtitle">כל משתמשי Ping</p>
+            </div>
+        </div>
+        <div class="app-header__actions">
+            <button type="button" id="streak-btn" class="streak-chip hidden" onclick="openStreakSheet()"></button>
+            <a href="shop.html" id="points-chip" class="points-chip hidden" title="הנקודות שלך">
+                <span class="coin">P</span><span data-points>0</span>
+            </a>
+            <button id="open-add-friend-btn" type="button" class="icon-btn hidden" onclick="openAddFriend()" aria-label="הוספת חבר" data-icon="userPlus"></button>
+            <a href="auth.html" id="login-btn" class="btn btn-primary btn-sm hidden">התחברות</a>
+        </div>
+    </header>
+
+    <!-- Conversations -->
+    <div id="convo-strip" class="convo-strip scroll-x" role="tablist" aria-label="שיחות">
+        <button type="button" class="convo" data-convo="community" aria-current="true" role="tab">
+            <span class="convo__ring"><span class="avatar avatar--lg community-avatar" data-icon="users"></span></span>
+            <span class="convo__label">קהילה</span>
+        </button>
+        <div id="friends-circles" class="contents">
+            <div class="flex items-center gap-3">
+                <div class="skeleton w-[52px] h-[52px] !rounded-full"></div>
+                <div class="skeleton w-[52px] h-[52px] !rounded-full"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Friend requests (shown only when there are incoming requests) -->
+    <section id="requests-panel" class="requests hidden" aria-label="בקשות חברות">
+        <button type="button" id="requests-toggle" class="requests__head" aria-expanded="true" aria-controls="requests-list">
+            <span class="requests__icon" data-icon="userPlus"></span>
+            <span class="flex-1 text-start">בקשות חברות</span>
+            <span id="requests-count" class="requests__count">0</span>
+            <svg class="requests__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="requests-list" class="requests__list"></div>
+    </section>
+
+    <!-- Messages -->
+    <main class="flex-1 relative overflow-hidden flex flex-col">
+        <div id="chat-scroll" class="flex-1 overflow-y-auto" aria-live="polite">
+            <div id="chat-messages" class="messages">
+                <div class="empty mt-10"><div class="spinner"></div></div>
+            </div>
+        </div>
+        <button id="jump-btn" type="button" class="jump-btn" onclick="scrollToBottom(true)">
+            <span>הודעות חדשות</span><span aria-hidden="true">↓</span>
+        </button>
+    </main>
+
+    <!-- Composer -->
+    <div class="composer">
+        <form id="chat-form" onsubmit="sendMessage(event)" class="hidden">
+            <button type="button" id="attach-btn" class="icon-btn" onclick="PingUI.openModal('attach-sheet')" aria-label="תמונה, נקודות ומתנות" data-icon="plus"></button>
+            <textarea id="message-input" class="composer__input" rows="1" placeholder="כתבו הודעה..." autocomplete="off" aria-label="הודעה" maxlength="2000"></textarea>
+            <button id="send-btn" type="submit" class="icon-btn icon-btn--brand" aria-label="שליחה" disabled data-icon="send"></button>
+            <input id="image-input" type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+        </form>
+        <div id="guest-composer" class="flex items-center justify-between gap-3 max-w-[760px] mx-auto py-1">
+            <span class="text-sm text-ink-2">התחברו כדי להצטרף לשיחה</span>
+            <a href="auth.html" class="btn btn-primary btn-sm">התחברות</a>
+        </div>
+    </div>
+
+    <nav data-ping-nav="chat"></nav>
+</div>
+
+    <!-- Sheet: attachments -->
+    <div id="attach-sheet" class="modal" role="dialog" aria-modal="true" aria-label="שליחת תוכן">
+        <div class="modal__panel">
+            <div class="modal__grabber"></div>
+            <div class="list !border-0 !rounded-2xl">
+                <button type="button" class="list-row" onclick="PingUI.closeModal('attach-sheet'); document.getElementById('image-input').click()">
+                    <span class="list-row__icon !bg-sky-100 !text-sky-700" data-icon="image"></span>
+                    <span class="list-row__body"><span class="list-row__title block">תמונה</span><span class="list-row__sub block">שליחת תמונה מהמכשיר</span></span>
+                </button>
+                <button type="button" id="gift-row" class="list-row" onclick="PingUI.closeModal('attach-sheet'); openAmountModal('gift')">
+                    <span class="list-row__icon !bg-rose-100 !text-rose-600" data-icon="gift"></span>
+                    <span class="list-row__body"><span class="list-row__title block">מתנת נקודות</span><span id="gift-row-sub" class="list-row__sub block">החבר יקבל את הנקודות אחרי שיאשר</span></span>
+                </button>
+            </div>
+            <button type="button" class="btn btn-soft btn-block mt-3" data-close-modal>ביטול</button>
+        </div>
+    </div>
+
+    <!-- Sheet: chat streak -->
+    <div id="streak-sheet" class="modal" role="dialog" aria-modal="true" aria-label="רצף צ'אט">
+        <div class="modal__panel">
+            <div class="modal__grabber"></div>
+            <div class="modal__head">
+                <h3 class="modal__title">רצף צ'אט</h3>
+                <button type="button" class="icon-btn icon-btn--plain" data-close-modal aria-label="סגירה" data-icon="x"></button>
+            </div>
+            <div id="streak-sheet-body"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Add friend -->
+    <div id="add-friend-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="add-friend-title">
+        <form class="modal__panel" onsubmit="addFriendByUsername(event)" novalidate>
+            <div class="modal__grabber"></div>
+            <div class="modal__head">
+                <h3 id="add-friend-title" class="modal__title">בקשת חברות</h3>
+                <button type="button" class="icon-btn icon-btn--plain" data-close-modal aria-label="סגירה" data-icon="x"></button>
+            </div>
+            <div class="field">
+                <label class="field-label" for="friend-username-input">שם המשתמש של החבר</label>
+                <div class="input-group" dir="ltr">
+                    <span class="input-group__prefix">@</span>
+                    <input id="friend-username-input" class="input" type="text" placeholder="username" autocapitalize="off" spellcheck="false" autocomplete="off">
+                </div>
+                <p id="friend-search-error" class="field-error hidden" role="alert"></p>
+                <p class="field-hint">החבר יקבל בקשה ויצטרך לאשר אותה.</p>
+            </div>
+            <button id="add-friend-submit" type="submit" class="btn btn-primary btn-lg btn-block mt-5"><span>שליחת בקשה</span></button>
+            <div id="outgoing-wrap" class="hidden mt-5">
+                <div class="text-xs font-bold text-ink-muted mb-2">בקשות שנשלחו וממתינות</div>
+                <div id="outgoing-list" class="space-y-2"></div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal: Send points / gift (shared) -->
+    <div id="amount-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="amount-title">
+        <form class="modal__panel" onsubmit="submitAmount(event)" novalidate>
+            <div class="modal__grabber"></div>
+            <div class="modal__head">
+                <h3 id="amount-title" class="modal__title">פרגון בנקודות</h3>
+                <button type="button" class="icon-btn icon-btn--plain" data-close-modal aria-label="סגירה" data-icon="x"></button>
+            </div>
+            <p id="amount-desc" class="modal__text mb-4"></p>
+            <div class="amount-options mb-3" id="amount-options">
+                <button type="button" class="amount-option" data-amount="5">5</button>
+                <button type="button" class="amount-option" data-amount="10" aria-pressed="true">10</button>
+                <button type="button" class="amount-option" data-amount="25">25</button>
+                <button type="button" class="amount-option" data-amount="50">50</button>
+            </div>
+            <div class="field">
+                <label class="field-label" for="amount-input">או סכום אחר</label>
+                <input id="amount-input" class="input" type="number" inputmode="numeric" min="1" max="1000" value="10">
+                <p class="field-hint">יתרה זמינה: <b class="text-ink" id="available-points">0</b> נקודות</p>
+                <p id="amount-error" class="field-error hidden" role="alert"></p>
+            </div>
+            <button id="amount-submit" type="submit" class="btn btn-primary btn-lg btn-block mt-5"><span id="amount-submit-text">שליחה</span></button>
+        </form>
+    </div>
+
+    <!-- Sheet: message actions -->
+    <div id="msg-menu" class="modal" role="dialog" aria-modal="true" aria-label="אפשרויות הודעה">
+        <div class="modal__panel">
+            <div class="modal__grabber"></div>
+            <div class="list !border-0 !rounded-2xl">
+                <button type="button" id="msg-copy-row" class="list-row" onclick="copyMessage()">
+                    <span class="list-row__icon" data-icon="edit"></span>
+                    <span class="list-row__body"><span class="list-row__title block">העתקת הטקסט</span></span>
+                </button>
+                <button type="button" id="msg-delete-row" class="list-row text-rose-600" onclick="deleteMessage()">
+                    <span class="list-row__icon !bg-rose-50 !text-rose-600" data-icon="trash"></span>
+                    <span class="list-row__body"><span class="list-row__title block">מחיקת ההודעה</span><span class="list-row__sub block">תימחק לכולם בשיחה</span></span>
+                </button>
+            </div>
+            <p id="msg-menu-note" class="text-xs text-ink-muted text-center mt-3 hidden">אי אפשר למחוק הודעות של נקודות ומתנות</p>
+            <button type="button" class="btn btn-soft btn-block mt-3" data-close-modal>ביטול</button>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="modal !items-center !p-4" role="dialog" aria-modal="true" aria-label="תמונה">
+        <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[85vh] rounded-2xl shadow-2xl" data-close-modal>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, getDocs, query, where, addDoc, orderBy, limit, onSnapshot, serverTimestamp, updateDoc, increment, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import * as firestoreAll from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB_qQYXimsvfpHx2Ewub5zgNC2169Da7CM",
+            authDomain: "ping-35cba.firebaseapp.com",
+            projectId: "ping-35cba",
+            storageBucket: "ping-35cba.firebasestorage.app",
+            messagingSenderId: "73779940449",
+            appId: "1:73779940449:web:281f72743f38a0a6816e20",
+            measurementId: "G-KVVDK019JN"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Friend requests: list + in-app popup with accept/decline, on every page
+        onAuthStateChanged(auth, (u) => { if (u) PingUI.startSocial(db, firestoreAll, u); });
+
+        const MESSAGE_LIMIT = 150;
+        const $ = (id) => document.getElementById(id);
+        const esc = PingUI.escapeHtml;
+
+        let currentUser = null;
+        let userData = null;
+        let userUnsub = null;
+        let currentConversationId = 'community';
+        let currentFriend = null;
+        let messagesUnsub = null;
+        let friendsKey = '';
+        let renderedIds = new Set();
+        let firstRender = true;
+        const unreadCounts = {};
+        const unreadUnsubs = {};
+        const streakUnsubs = {};
+        const streaks = {};   // convoId -> streak object
+
+        const params = new URLSearchParams(location.search);
+
+        const convoIdFor = (uid) => [currentUser.uid, uid].sort().join('_');
+
+        /* ---------------- Auth ---------------- */
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (userUnsub) { userUnsub(); userUnsub = null; }
+
+            if (!user) {
+                userData = null;
+                $('chat-form').classList.add('hidden');
+                $('guest-composer').classList.remove('hidden');
+                $('login-btn').classList.remove('hidden');
+                $('open-add-friend-btn').classList.add('hidden');
+                $('points-chip').classList.add('hidden');
+                $('friends-circles').innerHTML = '';
+                $('chat-messages').innerHTML = emptyState('chat', 'הצטרפו לשיחה', 'התחברו כדי לקרוא ולשלוח הודעות לקהילה ולחברים.');
+                return;
+            }
+
+            let initialized = false;
+            userUnsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+                if (!snap.exists() || !snap.data().username) {
+                    window.location.replace('auth.html');
+                    return;
+                }
+                userData = snap.data();
+                PingUI.setPoints(userData.points ?? 0);
+                $('available-points').textContent = PingUI.formatNumber(userData.points ?? 0);
+
+                const friends = userData.friends || [];
+                const key = friends.map(f => f.uid).join(',');
+                if (key !== friendsKey) {
+                    friendsKey = key;
+                    renderFriendsCircles();
+                    listenForUnread(friends);
+                }
+
+                if (!initialized) {
+                    initialized = true;
+                    $('chat-form').classList.remove('hidden');
+                    $('guest-composer').classList.add('hidden');
+                    $('login-btn').classList.add('hidden');
+                    $('open-add-friend-btn').classList.remove('hidden');
+                    $('points-chip').classList.remove('hidden');
+
+                    const withUid = params.get('with');
+                    const friend = withUid && friends.find(f => f.uid === withUid);
+                    if (friend) openPrivateChat(friend.uid); else openCommunityChat();
+                    if (params.get('add')) openAddFriend();
+                }
+            });
+        });
+
+        /* ---------------- Conversations strip ---------------- */
+        function renderFriendsCircles() {
+            const friends = userData?.friends || [];
+            const container = $('friends-circles');
+            let html = friends.map(friend => {
+                const unread = unreadCounts[convoIdFor(friend.uid)] || 0;
+                const active = currentConversationId === convoIdFor(friend.uid);
+                const st = streakFor(friend.uid);
+                const streakBadge = st.count > 0
+                    ? `<span class="convo__streak ${st.state === 'atRisk' ? 'is-risk' : ''}">${st.state === 'atRisk' ? '⏳' : '🔥'}${st.count}</span>`
+                    : '';
+                return `
+                    <button type="button" class="convo" role="tab" data-convo="${esc(friend.uid)}" aria-current="${active}">
+                        <span class="convo__ring">
+                            ${PingUI.avatarHTML({ ...PingUI.liveProfile(friend.uid, friend), size: 'lg' })}
+                            ${unread ? `<span class="convo__badge">${unread > 9 ? '9+' : unread}</span>` : ''}
+                            ${streakBadge}
+                        </span>
+                        <span class="convo__label">${PingUI.nameHTML(PingUI.liveProfile(friend.uid, friend))}</span>
+                    </button>`;
+            }).join('');
+
+            html += `
+                <button type="button" class="convo convo--add" onclick="openAddFriend()">
+                    <span class="convo__ring"><span class="avatar avatar--lg">${PingUI.icon('plus')}</span></span>
+                    <span class="convo__label">${friends.length ? 'הוספה' : 'הוסיפו חבר'}</span>
+                </button>`;
+            container.innerHTML = html;
+        }
+
+        $('convo-strip').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-convo]');
+            if (!btn || !currentUser) return;
+            const id = btn.dataset.convo;
+            if (id === 'community') openCommunityChat(); else openPrivateChat(id);
+        });
+
+        function setActiveConvo() {
+            document.querySelectorAll('.convo[data-convo]').forEach(el => {
+                const id = el.dataset.convo;
+                const isActive = id === 'community'
+                    ? currentConversationId === 'community'
+                    : currentConversationId === convoIdFor(id);
+                el.setAttribute('aria-current', String(isActive));
+            });
+        }
+
+        // Count new incoming messages in conversations that aren't open
+        function listenForUnread(friends) {
+            const wanted = new Set(friends.map(f => f.uid));
+            Object.keys(unreadUnsubs).forEach(uid => {
+                if (!wanted.has(uid)) { unreadUnsubs[uid](); delete unreadUnsubs[uid]; }
+            });
+            Object.keys(streakUnsubs).forEach(uid => {
+                if (!wanted.has(uid)) { streakUnsubs[uid](); delete streakUnsubs[uid]; }
+            });
+            friends.forEach(friend => {
+                if (unreadUnsubs[friend.uid]) return;
+                const convoId = convoIdFor(friend.uid);
+
+                // Streak state lives on the conversation document
+                streakUnsubs[friend.uid] = onSnapshot(doc(db, "conversations", convoId), (snap) => {
+                    streaks[convoId] = snap.exists() ? snap.data().streak || null : null;
+                    renderFriendsCircles();
+                    if (currentConversationId === convoId) renderStreakChip();
+                    maybeClaimStreak(convoId, friend);
+                }, (err) => console.warn("Streak listener error:", err));
+
+                const q = query(collection(db, "conversations", convoId, "messages"), orderBy("createdAt", "desc"), limit(1));
+                let first = true;
+                unreadUnsubs[friend.uid] = onSnapshot(q, (snapshot) => {
+                    if (first) { first = false; return; } // ignore history on load
+                    snapshot.docChanges().forEach(change => {
+                        if (change.type !== 'added') return;
+                        const msg = change.doc.data();
+                        if (msg.uid === currentUser.uid || convoId === currentConversationId) return;
+                        unreadCounts[convoId] = (unreadCounts[convoId] || 0) + 1;
+                        renderFriendsCircles();
+                        PingUI.toast(`הודעה חדשה מ${friend.displayName || friend.username}`, {
+                            action: { label: 'פתיחה', onClick: () => openPrivateChat(friend.uid) }
+                        });
+                    });
+                }, (err) => console.error("Unread listener error:", err));
+            });
+        }
+
+        window.openCommunityChat = function() {
+            currentConversationId = 'community';
+            currentFriend = null;
+            $('chat-title').textContent = "הצ'אט הקהילתי";
+            $('chat-subtitle').textContent = 'כל משתמשי Ping';
+            $('convo-avatar').innerHTML = `<span class="avatar avatar--sm community-avatar">${PingUI.icon('users')}</span>`;
+            $('message-input').placeholder = 'כתבו לקהילה...';
+            renderStreakChip();
+            updateGiftRow();
+            setActiveConvo();
+            history.replaceState(null, '', 'chat.html');
+            loadMessages('community');
+        };
+
+        window.openPrivateChat = function(friendUid) {
+            const friend = (userData?.friends || []).find(f => f.uid === friendUid);
+            if (!friend) return;
+            currentFriend = friend;
+            currentConversationId = convoIdFor(friendUid);
+            unreadCounts[currentConversationId] = 0;
+            const name = PingUI.liveProfile(friend.uid, friend).name;
+            renderChatHeader();
+            $('message-input').placeholder = `הודעה ל${name}...`;
+            renderStreakChip();
+            updateGiftRow();
+            renderFriendsCircles();
+            history.replaceState(null, '', `chat.html?with=${encodeURIComponent(friendUid)}`);
+            loadMessages(currentConversationId);
+        };
+
+        function updateGiftRow() {
+            const row = $('gift-row');
+            const isPrivate = currentConversationId !== 'community';
+            row.disabled = !isPrivate;
+            row.style.opacity = isPrivate ? '' : '.5';
+            $('gift-row-sub').textContent = isPrivate
+                ? `${currentFriend?.displayName || 'החבר'} יקבל/תקבל את הנקודות אחרי אישור`
+                : 'זמין רק בשיחה פרטית עם חבר';
+        }
+
+        /* ---------------- Messages ---------------- */
+        function emptyState(iconName, title, text) {
+            return `<div class="empty mt-10 fade-in">
+                <div class="empty__icon">${PingUI.icon(iconName)}</div>
+                <div class="empty__title">${esc(title)}</div>
+                <div class="empty__text">${esc(text)}</div>
+            </div>`;
+        }
+
+        function loadMessages(conversationId) {
+            if (messagesUnsub) messagesUnsub();
+            renderedIds = new Set();
+            msgIndex = {};
+            lastDocs = null;
+            firstRender = true;
+            $('jump-btn').classList.remove('is-visible');
+
+            const container = $('chat-messages');
+            container.innerHTML = '<div class="empty mt-10"><div class="spinner"></div></div>';
+
+            const q = query(collection(db, "conversations", conversationId, "messages"), orderBy("createdAt", "desc"), limit(MESSAGE_LIMIT));
+            messagesUnsub = onSnapshot(q, (snapshot) => {
+                if (conversationId !== currentConversationId) return;
+                const docs = snapshot.docs.slice().reverse();
+
+                if (docs.length === 0) {
+                    container.innerHTML = conversationId === 'community'
+                        ? emptyState('chat', 'עדיין שקט כאן', 'היו הראשונים לכתוב משהו לקהילה!')
+                        : emptyState('chat', `תגידו שלום ל${currentFriend?.displayName || 'חבר'}`, 'זו תחילת השיחה הפרטית שלכם.');
+                    return;
+                }
+
+                const scroller = $('chat-scroll');
+                const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
+                const lastIsMine = docs[docs.length - 1].data().uid === currentUser?.uid;
+
+                lastDocs = docs;
+                container.innerHTML = renderMessages(docs);
+                if (conversationId !== 'community') claimGiftRefunds(conversationId, docs);
+
+                if (firstRender || nearBottom || lastIsMine) {
+                    scrollToBottom(!firstRender);
+                } else {
+                    $('jump-btn').classList.add('is-visible');
+                }
+                firstRender = false;
+            }, (err) => {
+                console.error("Messages error:", err);
+                container.innerHTML = emptyState('alert', 'לא הצלחנו לטעון הודעות', 'בדקו את החיבור ונסו שוב.');
+            });
+        }
+
+        const dayKey = (d) => d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'pending';
+        function dayLabel(d) {
+            const today = new Date();
+            const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+            if (dayKey(d) === dayKey(today)) return 'היום';
+            if (dayKey(d) === dayKey(yesterday)) return 'אתמול';
+            return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+        }
+        const timeLabel = (d) => d ? d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : 'שולח…';
+
+        function renderMessages(docs) {
+            let html = '';
+            let prev = null;
+            let lastDay = null;
+
+            docs.forEach((docSnap) => {
+                const msg = docSnap.data();
+                const date = msg.createdAt?.toDate ? msg.createdAt.toDate() : null;
+                const isMe = currentUser && msg.uid === currentUser.uid;
+                const dk = date ? dayKey(date) : lastDay;
+
+                if (date && dk !== lastDay) {
+                    html += `<div class="day-sep">${dayLabel(date)}</div>`;
+                    lastDay = dk;
+                    prev = null;
+                }
+
+                const groupStart = !prev || prev.uid !== msg.uid || (date && prev.date && date - prev.date > 5 * 60 * 1000);
+                const isNew = !renderedIds.has(docSnap.id) && !firstRender;
+                renderedIds.add(docSnap.id);
+
+                const sender = PingUI.liveProfile(msg.uid, msg);
+                const showMeta = !isMe && groupStart && currentConversationId === 'community';
+                const nameHTML = showMeta
+                    ? `<div class="msg-name">${PingUI.nameHTML(sender)}<small dir="ltr">@${esc(sender.username)}</small></div>`
+                    : '';
+                // Own messages show your current photo and frame; others show the sender's
+                const avatarHTML = !groupStart ? '' : isMe
+                    ? PingUI.avatarHTML({ ...sender, size: 'sm' })
+                    : PingUI.avatarHTML({ ...sender, size: 'sm' });
+                msgIndex[docSnap.id] = { mine: isMe, type: msg.type || 'text', text: msg.text || '' };
+
+                html += `
+                    <div class="msg-row ${isMe ? 'msg-row--me' : ''} ${groupStart ? 'group-start' : ''} ${isNew ? 'msg-new' : ''}" data-msg-id="${esc(docSnap.id)}">
+                        <div class="msg-avatar-slot">${avatarHTML}</div>
+                        <div class="msg-col">
+                            ${nameHTML}
+                            ${bubbleHTML(docSnap.id, msg, isMe, date)}
+                        </div>
+                        <button type="button" class="msg-more" data-msg-menu="${esc(docSnap.id)}" aria-label="אפשרויות הודעה">⋯</button>
+                    </div>`;
+                prev = { uid: msg.uid, date };
+            });
+            return html;
+        }
+
+        function bubbleHTML(id, msg, isMe, date) {
+            const meta = `<span class="bubble__meta">${timeLabel(date)}</span>`;
+
+            if (msg.type === 'image') {
+                const src = PingUI.safeUrl(msg.imageUrl);
+                return `<div class="bubble bubble--media"><img src="${src}" alt="תמונה ששותפה בצ'אט" loading="lazy" data-full="${src}">${meta}</div>`;
+            }
+
+            if (msg.type === 'points') {
+                return `<div class="bubble bubble--special">
+                    <div class="special-head"><span class="special-icon">${PingUI.icon('coin')}</span>
+                    <span>${isMe ? 'פרגנת' : 'פרגן/ה'} ב-${PingUI.formatNumber(msg.points)} נקודות 🎉</span></div>${meta}</div>`;
+            }
+
+            if (msg.type === 'gift') {
+                const forMe = currentUser && msg.toUid === currentUser.uid;
+                const pts = PingUI.formatNumber(msg.points);
+                if (forMe && !msg.accepted && !msg.declined) {
+                    return `<div class="bubble bubble--special">
+                        <div class="special-head"><span class="special-icon">${PingUI.icon('gift')}</span>
+                        <span>מתנה של ${pts} נקודות בשבילך!</span></div>
+                        <div class="gift-actions">
+                            <button type="button" class="btn btn-soft btn-sm" data-gift-decline="${esc(id)}"><span class="inline-flex items-center gap-1">${PingUI.icon('x')}<span>דחייה</span></span></button>
+                            <button type="button" class="btn btn-dark btn-sm" data-gift-accept="${esc(id)}"><span class="inline-flex items-center gap-1">${PingUI.icon('check')}<span>אישור</span></span></button>
+                        </div>${meta}</div>`;
+                }
+                if (msg.declined) {
+                    const who = isMe ? (msg.refunded ? 'נדחתה · הנקודות חזרו אליך' : 'נדחתה') : 'נדחתה';
+                    return `<div class="bubble bubble--gift-declined">
+                        <div class="special-head"><span class="special-icon">${PingUI.icon('gift')}</span>
+                        <span>מתנה של ${pts} נקודות · <span class="font-medium">${who}</span></span></div>${meta}</div>`;
+                }
+                const status = msg.accepted ? 'התקבלה ✓' : 'ממתינה לאישור';
+                return `<div class="bubble bubble--gift-done">
+                    <div class="special-head"><span class="special-icon">${PingUI.icon('gift')}</span>
+                    <span>מתנה של ${pts} נקודות · <span class="font-medium">${status}</span></span></div>${meta}</div>`;
+            }
+
+            return `<div class="bubble ${isMe ? 'bubble--me' : 'bubble--them'}">${esc(msg.text)}${meta}</div>`;
+        }
+
+        /* ---------------- Message actions (long-press / right-click / ⋯) ---------------- */
+        let msgIndex = {};       // id -> { mine, type, text } for the open conversation
+        let menuMsgId = null;
+        let pressTimer = null, pressStart = null, lastMenuAt = 0;
+
+        function openMsgMenu(id) {
+            const info = msgIndex[id];
+            if (!info || Date.now() - lastMenuAt < 400) return;
+            const canDelete = info.mine && (info.type === 'text' || info.type === 'image');
+            if (info.type !== 'text' && !info.mine) return; // nothing to offer on others' media/gifts
+            lastMenuAt = Date.now();
+            menuMsgId = id;
+            $('msg-copy-row').classList.toggle('hidden', info.type !== 'text');
+            $('msg-delete-row').classList.toggle('hidden', !canDelete);
+            $('msg-menu-note').classList.toggle('hidden', !(info.mine && !canDelete));
+            if (navigator.vibrate) navigator.vibrate(12);
+            document.querySelector(`.msg-row[data-msg-id="${CSS.escape(id)}"]`)?.classList.add('is-pressed');
+            PingUI.openModal('msg-menu');
+        }
+
+        $('msg-menu').addEventListener('modal:close', () => {
+            document.querySelectorAll('.msg-row.is-pressed').forEach(r => r.classList.remove('is-pressed'));
+        });
+
+        const msgsEl = $('chat-messages');
+        msgsEl.addEventListener('pointerdown', (e) => {
+            const bubble = e.target.closest('.bubble');
+            if (!bubble || e.target.closest('button')) return;
+            const id = bubble.closest('.msg-row')?.dataset.msgId;
+            pressStart = { x: e.clientX, y: e.clientY };
+            clearTimeout(pressTimer);
+            pressTimer = setTimeout(() => openMsgMenu(id), 450);
+        });
+        msgsEl.addEventListener('pointermove', (e) => {
+            if (pressStart && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 10) clearTimeout(pressTimer);
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => msgsEl.addEventListener(t, () => clearTimeout(pressTimer)));
+        $('chat-scroll').addEventListener('scroll', () => clearTimeout(pressTimer), { passive: true });
+        msgsEl.addEventListener('contextmenu', (e) => {
+            const row = e.target.closest('.msg-row');
+            if (!row) return;
+            e.preventDefault();
+            openMsgMenu(row.dataset.msgId);
+        });
+
+        window.copyMessage = async function() {
+            const info = msgIndex[menuMsgId];
+            PingUI.closeModal('msg-menu');
+            try {
+                await navigator.clipboard.writeText(info?.text || '');
+                PingUI.toast('ההודעה הועתקה', { type: 'success', duration: 1800 });
+            } catch (e) {
+                PingUI.toast('לא הצלחנו להעתיק', { type: 'error' });
+            }
+        };
+
+        window.deleteMessage = async function() {
+            const id = menuMsgId;
+            const convoId = currentConversationId;
+            PingUI.closeModal('msg-menu');
+            const ok = await PingUI.confirm({
+                title: 'למחוק את ההודעה?', message: 'ההודעה תימחק לכולם בשיחה.',
+                confirmText: 'מחיקה', tone: 'danger', iconName: 'trash'
+            });
+            if (!ok) return;
+            const row = document.querySelector(`.msg-row[data-msg-id="${CSS.escape(id)}"]`);
+            row?.classList.add('msg-deleting');
+            try {
+                await deleteDoc(doc(db, "conversations", convoId, "messages", id));
+            } catch (error) {
+                console.error("Delete message failed:", error);
+                row?.classList.remove('msg-deleting');
+                PingUI.toast('המחיקה נכשלה, נסו שוב', { type: 'error' });
+            }
+        };
+
+        // Gift buttons & image lightbox (event delegation)
+        $('chat-messages').addEventListener('click', (e) => {
+            const more = e.target.closest('[data-msg-menu]');
+            if (more) { openMsgMenu(more.dataset.msgMenu); return; }
+            const acceptBtn = e.target.closest('[data-gift-accept]');
+            if (acceptBtn) { respondToGift(acceptBtn.dataset.giftAccept, true, acceptBtn); return; }
+            const declineBtn = e.target.closest('[data-gift-decline]');
+            if (declineBtn) { respondToGift(declineBtn.dataset.giftDecline, false, declineBtn); return; }
+            const img = e.target.closest('img[data-full]');
+            if (img) {
+                $('lightbox-img').src = img.dataset.full;
+                PingUI.openModal('lightbox');
+            }
+        });
+
+        // Keep pinned to bottom while images load
+        $('chat-messages').addEventListener('load', (e) => {
+            if (e.target.tagName !== 'IMG') return;
+            const s = $('chat-scroll');
+            if (s.scrollHeight - s.scrollTop - s.clientHeight < 400) s.scrollTop = s.scrollHeight;
+        }, true);
+
+        window.scrollToBottom = function(smooth) {
+            const s = $('chat-scroll');
+            s.scrollTo({ top: s.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+            $('jump-btn').classList.remove('is-visible');
+        };
+
+        $('chat-scroll').addEventListener('scroll', () => {
+            const s = $('chat-scroll');
+            if (s.scrollHeight - s.scrollTop - s.clientHeight < 80) $('jump-btn').classList.remove('is-visible');
+        });
+
+        /* ---------------- Composer ---------------- */
+        const input = $('message-input');
+        function autosize() {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+            $('send-btn').disabled = !input.value.trim();
+        }
+        input.addEventListener('input', autosize);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                e.preventDefault();
+                $('chat-form').requestSubmit();
+            }
+        });
+
+        function baseMessage() {
+            return {
+                uid: currentUser.uid,
+                name: userData.displayName || userData.username,
+                username: userData.username,
+                photoURL: userData.photoURL || currentUser.photoURL || '',
+                frame: userData.activeFrame || '',
+                gradient: userData.activeGradient || '',
+                createdAt: serverTimestamp()
+            };
+        }
+
+        window.sendMessage = async function(event) {
+            event.preventDefault();
+            if (!currentUser || !userData) return;
+            const text = input.value.trim();
+            if (!text) return;
+
+            input.value = '';
+            autosize();
+            input.focus();
+            const convoId = currentConversationId;
+            const friend = currentFriend;
+            try {
+                await addDoc(collection(db, "conversations", convoId, "messages"), { ...baseMessage(), type: 'text', text });
+                recordStreak(convoId, friend);
+            } catch (error) {
+                console.error("שגיאה בשליחת הודעה:", error);
+                input.value = text;
+                autosize();
+                PingUI.toast('ההודעה לא נשלחה, נסו שוב', { type: 'error' });
+            }
+        };
+
+        window.handleImageUpload = async function(event) {
+            const file = event.target.files[0];
+            event.target.value = '';
+            if (!file || !currentUser) return;
+
+            const convoId = currentConversationId;
+            const friend = currentFriend;
+            const dismiss = PingUI.toast('מעלה תמונה...', { duration: 60000 });
+            PingUI.setLoading($('attach-btn'), true);
+            try {
+                const imageUrl = await PingUI.uploadImage(file, 'chat');
+                await addDoc(collection(db, "conversations", convoId, "messages"), { ...baseMessage(), type: 'image', imageUrl });
+                dismiss();
+                recordStreak(convoId, friend);
+            } catch (error) {
+                console.error("שגיאה בשליחת תמונה:", error);
+                dismiss();
+                PingUI.toast(PingUI.uploadErrorMessage(error), { type: 'error' });
+            } finally {
+                PingUI.setLoading($('attach-btn'), false);
+            }
+        };
+
+        /* ---------------- Streaks ---------------- */
+        function streakFor(friendUid) {
+            return PingUI.streakStatus(streaks[convoIdFor(friendUid)], currentUser.uid, friendUid);
+        }
+
+        // Called after every message sent in a private chat
+        async function recordStreak(convoId, friend) {
+            if (convoId === 'community' || !friend) return;
+            const me = currentUser.uid;
+            const today = PingUI.dayKey();
+            const ref = doc(db, "conversations", convoId);
+            try {
+                const completedCount = await runTransaction(db, async (tx) => {
+                    const snap = await tx.get(ref);
+                    const cur = snap.exists() ? snap.data().streak : null;
+                    if (cur?.lastSent?.[me] === today) return 0; // already counted today
+                    const { streak, completed } = PingUI.streakApplySend(cur, me, friend.uid, today);
+                    tx.set(ref, { members: [me, friend.uid].sort(), streak }, { merge: true });
+                    return completed ? streak.count : 0;
+                });
+                if (completedCount) {
+                    const left = PingUI.STREAK.REWARD_EVERY - (completedCount % PingUI.STREAK.REWARD_EVERY);
+                    PingUI.toast(`🔥 ${completedCount} ימי רצף עם ${friend.displayName || friend.username}` +
+                        (left < PingUI.STREAK.REWARD_EVERY ? ` · עוד ${left} לבונוס` : ''), { type: 'success' });
+                }
+            } catch (error) {
+                console.warn("Streak update failed:", error);
+            }
+        }
+
+        // Each friend claims their own milestone bonus (100 points per 10 days)
+        const claiming = new Set();
+        async function maybeClaimStreak(convoId, friend) {
+            const st = PingUI.streakStatus(streaks[convoId], currentUser.uid, friend.uid);
+            if (!st.claimable || claiming.has(convoId)) return;
+            claiming.add(convoId);
+            const me = currentUser.uid;
+            try {
+                const points = await runTransaction(db, async (tx) => {
+                    const ref = doc(db, "conversations", convoId);
+                    const snap = await tx.get(ref);
+                    const { streak, points } = PingUI.streakClaim(snap.exists() ? snap.data().streak : null, me);
+                    if (!points) return 0;
+                    tx.set(ref, { streak: { claimed: { [me]: streak.claimed[me] } } }, { merge: true });
+                    tx.update(doc(db, "users", me), { points: increment(points) });
+                    return points;
+                });
+                if (points) {
+                    PingUI.toast(`בונוס רצף עם ${friend.displayName || friend.username}! +${points} נקודות`, { type: 'points', duration: 5000 });
+                }
+            } catch (error) {
+                console.warn("Streak claim failed:", error);
+            } finally {
+                claiming.delete(convoId);
+            }
+        }
+
+        function renderStreakChip() {
+            const btn = $('streak-btn');
+            if (!currentFriend) { btn.classList.add('hidden'); return; }
+            const st = streakFor(currentFriend.uid);
+            btn.classList.remove('hidden');
+            btn.dataset.state = st.restore && st.state !== 'active' && st.state !== 'atRisk' ? 'restorable' : st.state;
+            btn.innerHTML = `<span aria-hidden="true">${st.state === 'atRisk' ? '⏳' : '🔥'}</span><span>${st.count}</span>${st.restore ? '<span class="streak-chip__dot"></span>' : ''}`;
+            btn.setAttribute('aria-label', `רצף צ'אט: ${st.count} ימים`);
+            if ($('streak-sheet').classList.contains('is-open')) renderStreakSheet();
+        }
+
+        function renderStreakSheet() {
+            if (!currentFriend) return;
+            const st = streakFor(currentFriend.uid);
+            const name = esc(currentFriend.displayName || currentFriend.username);
+            const S = PingUI.STREAK;
+            const check = (ok, label) => `<div class="flex items-center gap-2 text-sm ${ok ? 'text-emerald-700' : 'text-ink-muted'}">
+                <span class="w-5 h-5 rounded-full flex items-center justify-center ${ok ? 'bg-emerald-100' : 'bg-[#F3F0E8]'}">${ok ? PingUI.icon('check').replace('<svg', '<svg width="12" height="12"') : ''}</span>${label}</div>`;
+
+            let statusHTML = '';
+            if (st.state === 'active') statusHTML = `<p class="modal__text">מעולה! היום כבר נספר. חזרו מחר כדי להמשיך את הרצף.</p>`;
+            else if (st.state === 'atRisk') statusHTML = `<p class="modal__text"><b>הרצף בסכנה!</b> שניכם צריכים לשלוח הודעה היום כדי לשמור עליו.</p>`;
+            else statusHTML = `<p class="modal__text">שלחו הודעות שניכם באותו יום כדי להתחיל רצף.</p>`;
+
+            const restoreHTML = st.restore ? `
+                <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                    <div class="font-bold text-rose-700">הרצף של ${st.restore.count} ימים נשבר</div>
+                    <p class="text-sm text-rose-700/80 mt-1">אפשר לשחזר אותו תוך ${S.RESTORE_WINDOW_DAYS} ימים מהשבירה.</p>
+                    <button type="button" id="restore-btn" class="btn btn-dark btn-block mt-3" onclick="restoreStreak()">
+                        <span class="inline-flex items-center gap-2">${PingUI.icon('restore')}<span>שחזור ב-${S.RESTORE_COST} נקודות</span></span>
+                    </button>
+                </div>` : '';
+
+            $('streak-sheet-body').innerHTML = `
+                <div class="text-center">
+                    <div class="streak-hero ${st.count ? '' : 'is-off'}">${st.state === 'atRisk' ? '⏳' : '🔥'}</div>
+                    <div class="text-4xl font-black mt-2">${st.count}</div>
+                    <div class="text-sm text-ink-muted font-semibold">ימי רצף עם ${name}</div>
+                </div>
+                <div class="mt-5">
+                    <div class="flex justify-between text-xs font-bold text-ink-2 mb-1.5">
+                        <span>${st.daysToNext === 1 ? 'עוד יום אחד' : `עוד ${st.daysToNext} ימים`}</span><span>בונוס ${S.REWARD_POINTS} נקודות ביום ${st.nextMilestone}</span>
+                    </div>
+                    <div class="streak-progress"><span style="width:${Math.round(st.progress * 100)}%"></span></div>
+                </div>
+                <div class="mt-5 space-y-2">${statusHTML}
+                    <div class="flex gap-5 pt-1">${check(st.meToday, 'שלחתם היום')}${check(st.otherToday, `${name} שלח/ה היום`)}</div>
+                </div>
+                ${restoreHTML}
+                <p class="text-xs text-ink-muted mt-5 leading-relaxed">יום נספר כששניכם שולחים לפחות הודעה אחת באותו יום. כל ${S.REWARD_EVERY} ימי רצף — ${S.REWARD_POINTS} נקודות לכל אחד מכם.</p>`;
+        }
+
+        window.openStreakSheet = function() {
+            renderStreakSheet();
+            PingUI.openModal('streak-sheet');
+        };
+
+        window.restoreStreak = async function() {
+            if (!currentFriend) return;
+            const convoId = currentConversationId;
+            const btn = $('restore-btn');
+            const S = PingUI.STREAK;
+            const ok = await PingUI.confirm({
+                title: 'לשחזר את הרצף?',
+                message: `${S.RESTORE_COST} נקודות ירדו מהיתרה שלכם והרצף יחזור לחיים.`,
+                confirmText: `שחזור · ${S.RESTORE_COST}`,
+                iconName: 'restore'
+            });
+            if (!ok) return;
+            PingUI.setLoading(btn, true);
+            try {
+                const restored = await runTransaction(db, async (tx) => {
+                    const ref = doc(db, "conversations", convoId);
+                    const uref = doc(db, "users", currentUser.uid);
+                    const snap = await tx.get(ref);
+                    const usnap = await tx.get(uref);
+                    const next = PingUI.streakApplyRestore(snap.exists() ? snap.data().streak : null);
+                    if (!next) throw new Error('not-restorable');
+                    const balance = usnap.data().points ?? 120;
+                    if (balance < S.RESTORE_COST) throw new Error('insufficient');
+                    tx.set(ref, { streak: next }, { merge: true });
+                    tx.update(uref, { points: balance - S.RESTORE_COST });
+                    return next.count;
+                });
+                PingUI.toast(`🔥 הרצף שוחזר: ${restored} ימים`, { type: 'success' });
+            } catch (error) {
+                console.error("Streak restore failed:", error);
+                const msg = error.message === 'insufficient' ? `צריך ${S.RESTORE_COST} נקודות כדי לשחזר`
+                    : error.message === 'not-restorable' ? 'אי אפשר לשחזר את הרצף הזה יותר' : 'השחזור נכשל, נסו שוב';
+                PingUI.toast(msg, { type: 'error' });
+            } finally {
+                if (document.contains(btn)) PingUI.setLoading(btn, false);
+            }
+        };
+
+        /* ---------------- Points & gifts ---------------- */
+        const amountInput = $('amount-input');
+        $('amount-options').addEventListener('click', (e) => {
+            const opt = e.target.closest('[data-amount]');
+            if (!opt) return;
+            amountInput.value = opt.dataset.amount;
+            syncAmountOptions();
+        });
+        amountInput.addEventListener('input', syncAmountOptions);
+        function syncAmountOptions() {
+            $('amount-error').classList.add('hidden');
+            document.querySelectorAll('#amount-options [data-amount]').forEach(b => {
+                b.setAttribute('aria-pressed', String(b.dataset.amount === amountInput.value));
+            });
+        }
+
+        window.openAmountModal = function() {
+            if (currentConversationId === 'community' || !currentFriend) return;
+            const friendName = currentFriend.displayName || currentFriend.username || '';
+            $('amount-title').textContent = `מתנה ל${friendName}`;
+            $('amount-desc').textContent = 'הנקודות ירדו מהיתרה שלכם עכשיו. אם החבר יאשר הן יעברו אליו, ואם ידחה הן יחזרו אליכם.';
+            $('amount-submit-text').textContent = 'שליחת המתנה';
+            $('available-points').textContent = PingUI.formatNumber(userData?.points ?? 0);
+            syncAmountOptions();
+            PingUI.openModal('amount-modal');
+        };
+
+        window.submitAmount = async function(event) {
+            event.preventDefault();
+            const amount = parseInt(amountInput.value, 10);
+            const available = userData?.points ?? 0;
+            const err = $('amount-error');
+            const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+
+            if (!currentFriend || currentConversationId === 'community') return showErr('מתנות אפשר לשלוח רק בשיחה פרטית');
+            if (!amount || amount <= 0) return showErr('הזינו מספר נקודות חיובי');
+            if (amount > available) return showErr(`אין מספיק נקודות (יש לכם ${available})`);
+
+            const btn = $('amount-submit');
+            const convoId = currentConversationId;
+            const friend = currentFriend;
+            PingUI.setLoading(btn, true);
+            try {
+                await addDoc(collection(db, "conversations", convoId, "messages"), {
+                    ...baseMessage(), type: 'gift', points: amount,
+                    toUid: friend.uid, senderName: userData.username,
+                    accepted: false, declined: false, refunded: false
+                });
+                await updateDoc(doc(db, "users", currentUser.uid), { points: increment(-amount) });
+                recordStreak(convoId, friend);
+                PingUI.closeModal('amount-modal');
+                PingUI.toast(`המתנה נשלחה ל${friend.displayName || friend.username}! 🎁`, { type: 'success' });
+            } catch (error) {
+                console.error("שגיאה בשליחת מתנה:", error);
+                PingUI.toast('השליחה נכשלה, נסו שוב', { type: 'error' });
+            } finally {
+                PingUI.setLoading(btn, false);
+            }
+        };
+
+        // Recipient accepts (points added to self) or declines (sender's app refunds itself)
+        window.respondToGift = async function(messageId, accept, btn) {
+            const convoId = currentConversationId;
+            const bubble = btn.closest('.bubble');
+            bubble?.querySelectorAll('button').forEach(b => b.disabled = true);
+            PingUI.setLoading(btn, true);
+            try {
+                const result = await runTransaction(db, async (tx) => {
+                    const msgRef = doc(db, "conversations", convoId, "messages", messageId);
+                    const snap = await tx.get(msgRef);
+                    if (!snap.exists()) return { state: 'gone' };
+                    const m = snap.data();
+                    if (m.toUid !== currentUser.uid) return { state: 'gone' };
+                    if (m.accepted || m.declined) return { state: 'done' };
+                    if (accept) {
+                        tx.update(msgRef, { accepted: true, respondedAt: new Date().toISOString() });
+                        tx.update(doc(db, "users", currentUser.uid), { points: increment(m.points || 0) });
+                    } else {
+                        tx.update(msgRef, { declined: true, respondedAt: new Date().toISOString() });
+                    }
+                    return { state: 'ok', points: m.points || 0 };
+                });
+                if (result.state === 'ok') {
+                    PingUI.toast(accept ? `+${result.points} נקודות נוספו ליתרה שלכם 🎉` : 'המתנה נדחתה, הנקודות יחזרו לשולח',
+                        { type: accept ? 'points' : 'info' });
+                } else {
+                    PingUI.toast(result.state === 'done' ? 'כבר הגבת למתנה הזו' : 'המתנה כבר לא קיימת', { type: 'info' });
+                }
+            } catch (error) {
+                console.error("Gift response failed:", error);
+                bubble?.querySelectorAll('button').forEach(b => b.disabled = false);
+                PingUI.toast('הפעולה נכשלה, נסו שוב', { type: 'error' });
+            } finally {
+                if (document.contains(btn)) PingUI.setLoading(btn, false);
+            }
+        };
+
+        // Sender side: gifts that were declined give the points back (once)
+        const refunding = new Set();
+        async function claimGiftRefunds(convoId, docs) {
+            const mine = docs.filter(d => {
+                const m = d.data();
+                return m.type === 'gift' && m.uid === currentUser.uid && m.declined && !m.refunded && !refunding.has(d.id);
+            });
+            for (const d of mine) {
+                refunding.add(d.id);
+                try {
+                    const pts = await runTransaction(db, async (tx) => {
+                        const ref = doc(db, "conversations", convoId, "messages", d.id);
+                        const snap = await tx.get(ref);
+                        const m = snap.exists() ? snap.data() : null;
+                        if (!m || m.uid !== currentUser.uid || !m.declined || m.refunded) return 0;
+                        tx.update(ref, { refunded: true });
+                        tx.update(doc(db, "users", currentUser.uid), { points: increment(m.points || 0) });
+                        return m.points || 0;
+                    });
+                    if (pts) PingUI.toast(`המתנה נדחתה · ${pts} נקודות חזרו אליך`, { type: 'points', duration: 4500 });
+                } catch (e) {
+                    console.warn('Gift refund failed:', e);
+                } finally {
+                    refunding.delete(d.id);
+                }
+            }
+        }
+
+        /* ---------------- Add friend ---------------- */
+        const friendInput = $('friend-username-input');
+        friendInput.addEventListener('input', () => {
+            $('friend-search-error').classList.add('hidden');
+            friendInput.removeAttribute('aria-invalid');
+        });
+        $('add-friend-modal').addEventListener('modal:close', () => {
+            friendInput.value = '';
+            $('friend-search-error').classList.add('hidden');
+        });
+
+        window.openAddFriend = function() {
+            if (PingUI.isGuestUser(currentUser, userData)) {
+                return PingUI.requireGoogle('כדי להוסיף חברים צריך להתחבר עם חשבון Google.');
+            }
+            PingUI.openModal('add-friend-modal');
+        };
+
+        window.addFriendByUsername = async function(event) {
+            if (PingUI.isGuestUser(currentUser, userData)) { event.preventDefault(); PingUI.closeModal('add-friend-modal'); return openAddFriend(); }
+            event.preventDefault();
+            const target = friendInput.value.trim().toLowerCase().replace(/^@/, '');
+            const errorEl = $('friend-search-error');
+            const showErr = (m) => { errorEl.textContent = m; errorEl.classList.remove('hidden'); friendInput.setAttribute('aria-invalid', 'true'); };
+
+            if (!target) return showErr('הקלידו שם משתמש');
+            if (target === userData.username) return showErr('אי אפשר להוסיף את עצמכם 🙂');
+            if ((userData.friends || []).some(f => f.username === target)) return showErr('המשתמש כבר ברשימת החברים שלכם');
+
+            const btn = $('add-friend-submit');
+            PingUI.setLoading(btn, true);
+            try {
+                const snapshot = await getDocs(query(collection(db, "users"), where("username", "==", target)));
+                if (snapshot.empty) { PingUI.setLoading(btn, false); return showErr('לא מצאנו משתמש בשם הזה'); }
+
+                const friendData = snapshot.docs[0].data();
+                if (friendData.isGuest) { PingUI.setLoading(btn, false); return showErr('המשתמש הזה מחובר כאורח ועוד לא חיבר חשבון Google'); }
+
+                const result = await PingUI.sendFriendRequest(userData, friendData);
+                PingUI.closeModal('add-friend-modal');
+                if (result === 'sent') {
+                    PingUI.toast(`בקשת חברות נשלחה ל${friendData.displayName || friendData.username}`, { type: 'success' });
+                }
+                // 'accepted': they had already sent you a request, so you're friends now (toast shown by PingUI)
+            } catch (error) {
+                if (error.message === 'already-pending') { PingUI.setLoading(btn, false); return showErr('כבר שלחת בקשה למשתמש הזה, היא ממתינה לאישור'); }
+                console.error("שגיאה בשליחת בקשת חברות:", error);
+                PingUI.toast('שליחת הבקשה נכשלה, נסו שוב', { type: 'error' });
+            } finally {
+                PingUI.setLoading(btn, false);
+            }
+        };
+
+        /* ---------------- Live profiles ---------------- */
+        let lastDocs = null;
+        function renderChatHeader() {
+            if (!currentFriend) return;
+            const p = PingUI.liveProfile(currentFriend.uid, currentFriend);
+            $('chat-title').innerHTML = PingUI.nameHTML(p);
+            $('chat-subtitle').textContent = '@' + p.username;
+            $('convo-avatar').innerHTML = PingUI.avatarHTML({ ...p, size: 'sm' });
+        }
+        // A friend (or anyone in the chat) changed photo, name, frame or gradient
+        window.addEventListener('ping:profiles', () => {
+            if (!currentUser || !userData) return;
+            renderFriendsCircles();
+            renderChatHeader();
+            if (lastDocs && lastDocs.length) {
+                const s = $('chat-scroll');
+                const top = s.scrollTop;
+                $('chat-messages').innerHTML = renderMessages(lastDocs);
+                s.scrollTop = top;
+            }
+        });
+
+        /* ---------------- Friend requests panel ---------------- */
+        function renderRequests({ incoming, outgoing }) {
+            const panel = $('requests-panel');
+            panel.classList.toggle('hidden', incoming.length === 0);
+            $('requests-count').textContent = incoming.length;
+            $('requests-list').innerHTML = incoming.map(r => `
+                <div class="req-row" data-req="${esc(r.id)}">
+                    ${PingUI.avatarHTML({ photoURL: r.fromPhotoURL, name: r.fromDisplayName || r.fromUsername, size: 'md', frame: r.fromFrame })}
+                    <div class="req-row__body">
+                        <div class="req-row__name">${esc(r.fromDisplayName || r.fromUsername)}</div>
+                        <div class="req-row__sub"><span dir="ltr">@${esc(r.fromUsername)}</span> · ${PingUI.timeAgo(r.createdAt?.toDate ? r.createdAt.toDate() : null)}</div>
+                    </div>
+                    <button type="button" class="req-btn req-btn--no" data-req-act="no" aria-label="דחיית הבקשה">${PingUI.icon('x')}</button>
+                    <button type="button" class="req-btn req-btn--yes" data-req-act="yes" aria-label="אישור הבקשה">${PingUI.icon('check')}</button>
+                </div>`).join('');
+
+            $('outgoing-wrap').classList.toggle('hidden', outgoing.length === 0);
+            $('outgoing-list').innerHTML = outgoing.map(r => `
+                <div class="out-row" data-out="${esc(r.id)}">
+                    ${PingUI.avatarHTML({ photoURL: r.toPhotoURL, name: r.toDisplayName || r.toUsername, size: 'sm' })}
+                    <div class="flex-1 min-w-0 text-sm"><b>${esc(r.toDisplayName || r.toUsername)}</b> <span class="text-ink-muted">· ממתין לאישור</span></div>
+                    <button type="button" class="btn btn-ghost btn-sm" data-out-cancel>ביטול</button>
+                </div>`).join('');
+        }
+
+        window.addEventListener('ping:requests', (e) => renderRequests(e.detail));
+        renderRequests(PingUI.getFriendRequests());
+
+        $('requests-toggle').addEventListener('click', () => {
+            const t = $('requests-toggle');
+            t.setAttribute('aria-expanded', String(t.getAttribute('aria-expanded') !== 'true'));
+        });
+
+        $('requests-list').addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-req-act]');
+            if (!b) return;
+            const row = b.closest('[data-req]');
+            const req = PingUI.getFriendRequests().incoming.find(r => r.id === row.dataset.req);
+            if (!req) return;
+            row.querySelectorAll('button').forEach(x => x.disabled = true);
+            PingUI.setLoading(b, true);
+            const ok = b.dataset.reqAct === 'yes' ? await PingUI.acceptFriendRequest(req) : await PingUI.declineFriendRequest(req);
+            if (ok) row.classList.add('is-leaving');
+            else { row.querySelectorAll('button').forEach(x => x.disabled = false); PingUI.setLoading(b, false); }
+        });
+
+        $('outgoing-list').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-out-cancel]');
+            if (!b) return;
+            const id = b.closest('[data-out]').dataset.out;
+            const req = PingUI.getFriendRequests().outgoing.find(r => r.id === id);
+            if (req) PingUI.cancelFriendRequest(req);
+        });
+    </script>
+</body>
+</html>
